@@ -1,0 +1,962 @@
+import { useState, useEffect, useRef, useCallback, memo } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, RadialBarChart, RadialBar } from "recharts";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
+const API    = "http://localhost:3001/api";
+const API_IA = "http://localhost:5001/ia";
+const COULEURS = ["#00D4AA","#F59E0B","#FF4D6D","#7C3AED","#3B82F6","#EC4899"];
+
+function badge(statut) {
+  const s = {
+    "En service":{background:"rgba(0,212,170,0.15)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.3)"},
+    "En maintenance":{background:"rgba(245,158,11,0.15)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.3)"},
+    "En panne":{background:"rgba(255,77,109,0.15)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.3)"},
+    "Planifiée":{background:"rgba(59,130,246,0.15)",color:"#60A5FA",border:"1px solid rgba(59,130,246,0.3)"},
+    "En cours":{background:"rgba(245,158,11,0.15)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.3)"},
+    "Terminée":{background:"rgba(0,212,170,0.15)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.3)"},
+    "CRITIQUE":{background:"rgba(255,77,109,0.15)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.3)"},
+    "HAUTE":{background:"rgba(255,77,109,0.12)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.25)"},
+    "MOYENNE":{background:"rgba(245,158,11,0.15)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.3)"},
+    "BASSE":{background:"rgba(0,212,170,0.15)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.3)"},
+    "ADMIN":{background:"rgba(124,58,237,0.15)",color:"#A78BFA",border:"1px solid rgba(124,58,237,0.3)"},
+    "INGENIEUR":{background:"rgba(59,130,246,0.15)",color:"#60A5FA",border:"1px solid rgba(59,130,246,0.3)"},
+    "TECHNICIEN":{background:"rgba(0,212,170,0.15)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.3)"},
+  }[statut]||{background:"rgba(255,255,255,0.08)",color:"#94A3B8",border:"1px solid rgba(255,255,255,0.1)"};
+  return {...s,padding:"3px 12px",borderRadius:"999px",fontSize:"11px",fontWeight:600,display:"inline-block"};
+}
+
+function riskColor(v){return v>=75?"#FF4D6D":v>=50?"#F59E0B":"#00D4AA";}
+
+function formaterDate(ts) {
+  if (!ts) return "—";
+  try {
+    const d = new Date(ts.includes("T") ? ts : ts.replace(" ","T"));
+    if (isNaN(d)) return ts;
+    return d.toLocaleDateString("fr-FR") + " " + d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  } catch { return ts; }
+}
+
+// ── Fond animé ───────────────────────────────────────────────
+const AnimatedBackground = memo(() => {
+  const icons = ["⚡","🔬","💉","🩺","🧬","⚕️","🏥","💊","🩻","🔭","⚙️","📡"];
+  const particles = Array.from({length:20},(_,i)=>({
+    id:i, icon:icons[i%icons.length],
+    x:Math.random()*100, y:Math.random()*100,
+    size:Math.random()*16+10,
+    duration:Math.random()*20+15,
+    delay:Math.random()*10,
+    opacity:Math.random()*0.08+0.03,
+  }));
+  return (
+    <div style={{position:"fixed",inset:0,overflow:"hidden",zIndex:0,pointerEvents:"none"}}>
+      <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,#020B18 0%,#041225 30%,#060D1F 60%,#02091A 100%)"}}/>
+      <div style={{position:"absolute",inset:0,backgroundImage:`linear-gradient(rgba(0,212,170,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,170,0.03) 1px,transparent 1px)`,backgroundSize:"60px 60px"}}/>
+      <div style={{position:"absolute",top:"-10%",left:"-5%",width:"50vw",height:"50vw",borderRadius:"50%",background:"radial-gradient(circle,rgba(0,212,170,0.06) 0%,transparent 70%)"}}/>
+      <div style={{position:"absolute",bottom:"-10%",right:"-5%",width:"60vw",height:"60vw",borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,0.05) 0%,transparent 70%)"}}/>
+      <style>{`
+        @keyframes float{0%,100%{transform:translateY(0px) rotate(0deg);}33%{transform:translateY(-20px) rotate(5deg);}66%{transform:translateY(10px) rotate(-3deg);}}
+        @keyframes scan-line{0%{transform:translateY(-100%);}100%{transform:translateY(100vh);}}
+      `}</style>
+      {particles.map(p=>(
+        <div key={p.id} style={{position:"absolute",left:`${p.x}%`,top:`${p.y}%`,fontSize:`${p.size}px`,opacity:p.opacity,animation:`float ${p.duration}s ${p.delay}s ease-in-out infinite`}}>{p.icon}</div>
+      ))}
+      <div style={{position:"absolute",left:0,right:0,height:"1px",background:"linear-gradient(90deg,transparent,rgba(0,212,170,0.15),transparent)",animation:"scan-line 8s linear infinite"}}/>
+    </div>
+  );
+});
+
+// ════════════════════════════════════════════════════════════
+// STYLES
+// ════════════════════════════════════════════════════════════
+const S = {
+  app:{fontFamily:"'Segoe UI',sans-serif",background:"transparent",minHeight:"100vh"},
+  sidebar:{width:250,background:"rgba(2,11,24,0.92)",backdropFilter:"blur(20px)",borderRight:"1px solid rgba(0,212,170,0.12)",position:"fixed",top:0,left:0,height:"100vh",display:"flex",flexDirection:"column",zIndex:100},
+  sidebarTop:{padding:"28px 24px",borderBottom:"1px solid rgba(0,212,170,0.1)",background:"rgba(0,212,170,0.03)"},
+  sidebarTitle:{fontSize:15,fontWeight:800,color:"#00D4AA",marginBottom:4,letterSpacing:"0.05em"},
+  sidebarSub:{fontSize:10,color:"#475569",letterSpacing:"0.1em",textTransform:"uppercase"},
+  nav:(a)=>({display:"flex",alignItems:"center",gap:12,padding:"11px 24px",cursor:"pointer",fontSize:13,background:a?"rgba(0,212,170,0.08)":"transparent",color:a?"#00D4AA":"#64748B",borderLeft:a?"3px solid #00D4AA":"3px solid transparent",transition:"all 0.15s"}),
+  main:{marginLeft:250,padding:"36px",position:"relative",zIndex:1},
+  title:{fontSize:26,fontWeight:800,color:"white",marginBottom:6,letterSpacing:"-0.02em"},
+  sub:{fontSize:13,color:"#475569",marginBottom:28},
+  kgrid:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:16,marginBottom:32},
+  kcard:(c)=>({background:"rgba(255,255,255,0.03)",backdropFilter:"blur(10px)",borderRadius:12,padding:20,border:`1px solid ${c}25`,borderTop:`2px solid ${c}`,boxShadow:`0 0 20px ${c}08`}),
+  kval:{fontSize:34,fontWeight:900,color:"white"},
+  klbl:{fontSize:12,color:"#475569",marginTop:4},
+  card:{background:"rgba(255,255,255,0.03)",backdropFilter:"blur(10px)",borderRadius:14,padding:24,border:"1px solid rgba(255,255,255,0.06)",marginBottom:24},
+  cardTitle:{fontSize:15,fontWeight:700,color:"white",marginBottom:16},
+  btn:(c="#00D4AA")=>({background:`${c}18`,color:c,border:`1px solid ${c}40`,padding:"9px 18px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,transition:"all 0.15s"}),
+  btnSolid:(c="#00D4AA")=>({background:c,color:"#020B18",border:"none",padding:"10px 20px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}),
+  btnO:{background:"transparent",color:"#60A5FA",border:"1px solid rgba(96,165,250,0.3)",padding:"9px 18px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600},
+  tbl:{width:"100%",borderCollapse:"collapse",fontSize:13},
+  th:{textAlign:"left",padding:"10px 14px",background:"rgba(255,255,255,0.03)",color:"#475569",fontWeight:600,fontSize:11,textTransform:"uppercase",letterSpacing:"0.08em",borderBottom:"1px solid rgba(255,255,255,0.06)"},
+  td:{padding:"12px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)",color:"#CBD5E1"},
+  inp:{width:"100%",padding:"10px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:13,color:"white",boxSizing:"border-box",outline:"none"},
+  sel:{width:"100%",padding:"10px 14px",background:"rgba(15,23,42,0.9)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:13,color:"white",boxSizing:"border-box"},
+  lbl:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6,display:"block",textTransform:"uppercase",letterSpacing:"0.06em"},
+  fgrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20},
+  overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200},
+  modal:{background:"rgba(4,18,37,0.98)",backdropFilter:"blur(20px)",borderRadius:16,padding:32,width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.6)"},
+  toast:(t)=>({position:"fixed",top:24,right:24,zIndex:999,background:t==="e"?"rgba(255,77,109,0.15)":"rgba(0,212,170,0.12)",backdropFilter:"blur(10px)",border:`1px solid ${t==="e"?"rgba(255,77,109,0.4)":"rgba(0,212,170,0.4)"}`,color:t==="e"?"#FF4D6D":"#00D4AA",padding:"12px 20px",borderRadius:10,fontWeight:600,fontSize:14,boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}),
+};
+
+// ════════════════════════════════════════════════════════════
+// PAGE CONNEXION
+// ════════════════════════════════════════════════════════════
+function PageConnexion({onLogin}) {
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [erreur,setErreur]=useState("");
+  const [chargement,setChargement]=useState(false);
+
+  async function seConnecter() {
+    if(!email||!password){setErreur("Veuillez remplir tous les champs.");return;}
+    setChargement(true);setErreur("");
+    try {
+      const res=await fetch(`${API}/auth/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});
+      const data=await res.json();
+      if(!res.ok){setErreur(data.erreur||"Erreur de connexion.");return;}
+      localStorage.setItem("token",data.token);
+      localStorage.setItem("user",JSON.stringify(data.user));
+      localStorage.setItem("preferences",JSON.stringify(data.preferences||{monitoring_actif:0,monitoring_equip_id:1}));
+      onLogin(data.user,data.token,data.preferences||{monitoring_actif:0,monitoring_equip_id:1});
+    }catch{setErreur("Impossible de contacter le serveur.");}
+    finally{setChargement(false);}
+  }
+
+  return (
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",fontFamily:"'Segoe UI',sans-serif"}}>
+      <AnimatedBackground/>
+      <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:460,padding:"0 24px"}}>
+        <div style={{textAlign:"center",marginBottom:40}}>
+          <div style={{width:80,height:80,borderRadius:"50%",margin:"0 auto 16px",background:"rgba(0,212,170,0.1)",border:"2px solid rgba(0,212,170,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,boxShadow:"0 0 40px rgba(0,212,170,0.15)"}}>🏥</div>
+          <h1 style={{fontSize:28,fontWeight:900,color:"white",margin:0,letterSpacing:"-0.02em"}}>BioMed Plateforme</h1>
+          <p style={{fontSize:12,color:"#475569",marginTop:6,textTransform:"uppercase",letterSpacing:"0.15em"}}>Gestion Intelligente du Parc Biomédical</p>
+        </div>
+        <div style={{background:"rgba(4,18,37,0.85)",backdropFilter:"blur(20px)",borderRadius:20,padding:"40px 36px",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
+          <div style={{marginBottom:20}}>
+            <label style={S.lbl}>Adresse email</label>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&seConnecter()} placeholder="votre@email.com" style={S.inp}/>
+          </div>
+          <div style={{marginBottom:28}}>
+            <label style={S.lbl}>Mot de passe</label>
+            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&seConnecter()} placeholder="••••••••" style={S.inp}/>
+          </div>
+          {erreur&&<div style={{background:"rgba(255,77,109,0.1)",border:"1px solid rgba(255,77,109,0.3)",borderRadius:8,padding:"10px 14px",marginBottom:16,color:"#FF4D6D",fontSize:13}}>❌ {erreur}</div>}
+          <button onClick={seConnecter} disabled={chargement} style={{width:"100%",padding:"13px",background:chargement?"rgba(0,212,170,0.3)":"#00D4AA",color:"#020B18",border:"none",borderRadius:10,fontSize:15,fontWeight:800,cursor:chargement?"not-allowed":"pointer",boxShadow:chargement?"none":"0 0 20px rgba(0,212,170,0.3)"}}>
+            {chargement?"Connexion...":"→ Se connecter"}
+          </button>
+          <div style={{marginTop:28,paddingTop:20,borderTop:"1px solid rgba(255,255,255,0.05)"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#334155",marginBottom:12,textTransform:"uppercase",letterSpacing:"0.1em"}}>Comptes de test</div>
+            {[
+              {role:"Admin",email:"admin@biomedical.dz",pass:"admin123",c:"#A78BFA"},
+              {role:"Ingénieur",email:"ingenieur@biomedical.dz",pass:"ingenieur123",c:"#60A5FA"},
+              {role:"Technicien",email:"technicien@biomedical.dz",pass:"technicien123",c:"#00D4AA"},
+            ].map(u=>(
+              <div key={u.role} onClick={()=>{setEmail(u.email);setPassword(u.pass);}} style={{cursor:"pointer",padding:"8px 12px",borderRadius:8,marginBottom:6,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:12,fontWeight:700,color:u.c}}>{u.role}</span>
+                <span style={{fontSize:11,color:"#334155"}}>{u.email}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// MODULE IA — Composant principal
+// ════════════════════════════════════════════════════════════
+const ModuleIA = memo(({equipements, token, setOnglet}) => {
+  const [predictions, setPredictions] = useState([]);
+  const [statsIA, setStatsIA] = useState(null);
+  const [predictionDetail, setPredictionDetail] = useState(null);
+  const [chargement, setChargement] = useState(false);
+  const [entrainement, setEntrainement] = useState(false);
+  const [iaConnectee, setIaConnectee] = useState(false);
+  const [equipSelectionne, setEquipSelectionne] = useState(null);
+
+  useEffect(() => {
+    verifierIA();
+  }, []);
+
+  async function verifierIA() {
+    try {
+      const r = await fetch(`${API_IA}/ping`);
+      if (r.ok) {
+        setIaConnectee(true);
+        chargerStats();
+      }
+    } catch {
+      setIaConnectee(false);
+    }
+  }
+
+  async function chargerStats() {
+    try {
+      const r = await fetch(`${API_IA}/stats`);
+      if (r.ok) setStatsIA(await r.json());
+    } catch {}
+  }
+
+  async function entrainerModele() {
+    setEntrainement(true);
+    try {
+      const r = await fetch(`${API_IA}/entrainer`, {method:"POST"});
+      const data = await r.json();
+      alert(data.message);
+    } catch {
+      alert("Erreur lors de l'entraînement");
+    } finally {
+      setEntrainement(false);
+    }
+  }
+
+  async function analyserEquipement(id) {
+    setChargement(true);
+    setPredictionDetail(null);
+    setEquipSelectionne(id);
+    try {
+      const r = await fetch(`${API_IA}/prediction/${id}`);
+      if (r.ok) {
+        const data = await r.json();
+        setPredictionDetail(data);
+        // Mettre à jour la liste
+        setPredictions(p => {
+          const exists = p.find(x => x.equipement_id === id);
+          if (exists) return p.map(x => x.equipement_id === id ? data : x);
+          return [data, ...p];
+        });
+      }
+    } catch {
+      alert("Serveur IA inaccessible. Vérifiez que python serveur_ia.py tourne.");
+    } finally {
+      setChargement(false);
+    }
+  }
+
+  async function analyserTous() {
+    setChargement(true);
+    const resultats = [];
+    for (const equip of equipements) {
+      try {
+        const r = await fetch(`${API_IA}/prediction/${equip.id}`);
+        if (r.ok) resultats.push(await r.json());
+      } catch {}
+    }
+    resultats.sort((a,b) => b.probabilite_panne - a.probabilite_panne);
+    setPredictions(resultats);
+    chargerStats();
+    setChargement(false);
+  }
+
+  if (!iaConnectee) return (
+    <div style={{...S.card, padding:48, textAlign:"center"}}>
+      <div style={{fontSize:56, marginBottom:16}}>🤖</div>
+      <div style={{fontSize:20, fontWeight:700, color:"white", marginBottom:8}}>Serveur IA non connecté</div>
+      <div style={{fontSize:14, color:"#475569", marginBottom:24, maxWidth:400, margin:"0 auto 24px"}}>
+        Le serveur IA Python n'est pas démarré. Ouvrez un nouveau CMD et tapez :
+      </div>
+      <div style={{background:"rgba(0,0,0,0.4)", borderRadius:8, padding:"12px 20px", display:"inline-block", marginBottom:24}}>
+        <code style={{color:"#00D4AA", fontSize:14}}>
+          cd Desktop\plateforme-biomedicale\ia<br/>
+          python serveur_ia.py
+        </code>
+      </div>
+      <br/>
+      <button style={S.btnSolid()} onClick={verifierIA}>🔄 Réessayer la connexion</button>
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Statut IA */}
+      <div style={{...S.card, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:16}}>
+        <div style={{display:"flex", alignItems:"center", gap:12}}>
+          <div style={{width:12, height:12, borderRadius:"50%", background:"#00D4AA", boxShadow:"0 0 8px #00D4AA"}}/>
+          <div>
+            <div style={{fontWeight:700, color:"white", fontSize:15}}>🤖 Serveur IA connecté</div>
+            <div style={{fontSize:12, color:"#475569"}}>http://localhost:5001 — Modèle : {statsIA ? "Actif" : "En attente"}</div>
+          </div>
+        </div>
+        <div style={{display:"flex", gap:12, flexWrap:"wrap"}}>
+          <button style={S.btn("#A78BFA")} onClick={entrainerModele} disabled={entrainement}>
+            {entrainement ? "⏳ Entraînement..." : "🧠 Entraîner le modèle"}
+          </button>
+          <button style={S.btnSolid()} onClick={analyserTous} disabled={chargement}>
+            {chargement ? "⏳ Analyse..." : "🔍 Analyser tous les équipements"}
+          </button>
+        </div>
+      </div>
+
+      {/* Stats globales */}
+      {statsIA && (
+        <div style={S.kgrid}>
+          {[
+            {v:statsIA.total_equipements, l:"Total équipements", c:"#3B82F6"},
+            {v:statsIA.risque_critique, l:"Risque critique", c:"#FF4D6D"},
+            {v:statsIA.risque_haute, l:"Risque élevé", c:"#F59E0B"},
+            {v:statsIA.risque_normal, l:"Risque normal", c:"#00D4AA"},
+            {v:statsIA.score_moyen+"%", l:"Score moyen", c:"#A78BFA"},
+          ].map((k,i)=>(
+            <div key={i} style={S.kcard(k.c)}>
+              <div style={S.kval}>{k.v}</div>
+              <div style={S.klbl}>{k.l}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:24}}>
+        {/* Analyse par équipement */}
+        <div style={S.card}>
+          <div style={S.cardTitle}>🔍 Analyser un équipement</div>
+          <div style={{display:"flex", flexDirection:"column", gap:8}}>
+            {equipements.map(e => (
+              <div key={e.id} onClick={() => analyserEquipement(e.id)}
+                style={{
+                  display:"flex", justifyContent:"space-between", alignItems:"center",
+                  padding:"10px 14px", borderRadius:8, cursor:"pointer",
+                  background: equipSelectionne===e.id ? "rgba(0,212,170,0.08)" : "rgba(255,255,255,0.02)",
+                  border: equipSelectionne===e.id ? "1px solid rgba(0,212,170,0.3)" : "1px solid rgba(255,255,255,0.05)",
+                  transition:"all 0.15s",
+                }}>
+                <div>
+                  <div style={{fontWeight:600, color:"white", fontSize:13}}>{e.nom}</div>
+                  <div style={{fontSize:11, color:"#475569"}}>{e.service}</div>
+                </div>
+                <div style={{display:"flex", alignItems:"center", gap:8}}>
+                  <div style={{width:50, height:4, background:"rgba(255,255,255,0.08)", borderRadius:2}}>
+                    <div style={{width:`${e.scoreRisque}%`, height:"100%", background:riskColor(e.scoreRisque), borderRadius:2}}/>
+                  </div>
+                  <span style={{fontWeight:700, color:riskColor(e.scoreRisque), fontSize:13}}>{e.scoreRisque}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Résultat prédiction */}
+        <div style={S.card}>
+          <div style={S.cardTitle}>📊 Résultat de l'analyse IA</div>
+          {chargement ? (
+            <div style={{textAlign:"center", padding:40, color:"#475569"}}>
+              <div style={{fontSize:36, marginBottom:12}}>⏳</div>
+              <div>Analyse en cours...</div>
+            </div>
+          ) : predictionDetail ? (
+            <div>
+              {/* Jauge circulaire */}
+              <div style={{textAlign:"center", marginBottom:20}}>
+                <div style={{
+                  width:140, height:140, borderRadius:"50%",
+                  background:`conic-gradient(${predictionDetail.couleur} ${predictionDetail.pourcentage * 3.6}deg, rgba(255,255,255,0.05) 0deg)`,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  margin:"0 auto",
+                  boxShadow:`0 0 30px ${predictionDetail.couleur}30`,
+                }}>
+                  <div style={{width:110, height:110, borderRadius:"50%", background:"rgba(4,18,37,0.95)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center"}}>
+                    <div style={{fontSize:28, fontWeight:900, color:predictionDetail.couleur}}>{predictionDetail.pourcentage}%</div>
+                    <div style={{fontSize:10, color:"#475569", textTransform:"uppercase", letterSpacing:"0.05em"}}>Risque panne</div>
+                  </div>
+                </div>
+                <div style={{marginTop:12}}>
+                  <span style={badge(predictionDetail.niveau_risque)}>{predictionDetail.niveau_risque}</span>
+                </div>
+              </div>
+
+              <div style={{background:"rgba(255,255,255,0.02)", borderRadius:8, padding:14, marginBottom:12}}>
+                <div style={{fontSize:11, color:"#475569", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em"}}>Équipement</div>
+                <div style={{fontWeight:700, color:"white"}}>{predictionDetail.equipement_nom}</div>
+              </div>
+
+              <div style={{background:"rgba(255,255,255,0.02)", borderRadius:8, padding:14, marginBottom:12}}>
+                <div style={{fontSize:11, color:"#475569", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em"}}>Délai estimé avant panne</div>
+                <div style={{fontWeight:700, color:predictionDetail.couleur, fontSize:18}}>~{predictionDetail.delai_estime_jours} jours</div>
+              </div>
+
+              <div style={{background:"rgba(255,255,255,0.02)", borderRadius:8, padding:14, marginBottom:12}}>
+                <div style={{fontSize:11, color:"#475569", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em"}}>Facteurs clés</div>
+                {predictionDetail.facteurs_cles?.map((f,i)=>(
+                  <div key={i} style={{display:"flex", alignItems:"center", gap:8, marginBottom:4}}>
+                    <div style={{width:4, height:4, borderRadius:"50%", background:predictionDetail.couleur, flexShrink:0}}/>
+                    <div style={{fontSize:12, color:"#CBD5E1"}}>{f}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{background:`${predictionDetail.couleur}10`, border:`1px solid ${predictionDetail.couleur}30`, borderRadius:8, padding:14}}>
+                <div style={{fontSize:13, color:predictionDetail.couleur, fontWeight:600}}>{predictionDetail.recommandation}</div>
+              </div>
+
+              {predictionDetail.niveau_risque !== "BASSE" && (
+                <button style={{...S.btnSolid("#FF4D6D"), width:"100%", marginTop:12}}
+                  onClick={()=>setOnglet("maintenances")}>
+                  🔧 Planifier une maintenance
+                </button>
+              )}
+            </div>
+          ) : (
+            <div style={{textAlign:"center", padding:40, color:"#334155"}}>
+              <div style={{fontSize:36, marginBottom:12}}>🤖</div>
+              <div>Sélectionnez un équipement à gauche pour l'analyser</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Liste prédictions */}
+      {predictions.length > 0 && (
+        <div style={S.card}>
+          <div style={S.cardTitle}>📋 Résultats — Tous les équipements ({predictions.length})</div>
+          <table style={S.tbl}>
+            <thead>
+              <tr>{["Équipement","Score IA","Niveau","Délai estimé","Recommandation","Action"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {predictions.map((p,i)=>(
+                <tr key={i}>
+                  <td style={S.td}><div style={{fontWeight:600, color:"white"}}>{p.equipement_nom}</div></td>
+                  <td style={S.td}>
+                    <div style={{display:"flex", alignItems:"center", gap:8}}>
+                      <div style={{width:70, height:5, background:"rgba(255,255,255,0.08)", borderRadius:3}}>
+                        <div style={{width:`${p.pourcentage}%`, height:"100%", background:p.couleur, borderRadius:3}}/>
+                      </div>
+                      <span style={{fontWeight:700, color:p.couleur}}>{p.pourcentage}%</span>
+                    </div>
+                  </td>
+                  <td style={S.td}><span style={badge(p.niveau_risque)}>{p.niveau_risque}</span></td>
+                  <td style={S.td}><span style={{color:p.couleur, fontWeight:600}}>~{p.delai_estime_jours} jours</span></td>
+                  <td style={{...S.td, fontSize:12, color:"#64748B", maxWidth:200}}>{p.recommandation?.substring(0,60)}...</td>
+                  <td style={S.td}>
+                    <button onClick={()=>{setPredictionDetail(p);setEquipSelectionne(p.equipement_id);window.scrollTo(0,0);}}
+                      style={{...S.btn("#60A5FA"), fontSize:11, padding:"4px 10px"}}>
+                      Détail
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ════════════════════════════════════════════════════════════
+// AUTRES COMPOSANTS (identiques à v8)
+// ════════════════════════════════════════════════════════════
+
+const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMaint,total,serv,maint,panne,dispo,crit,exportPDF,setOnglet})=>(
+  <div>
+    <div style={S.kgrid}>
+      {[
+        {v:total,l:"Total équipements",c:"#3B82F6"},
+        {v:serv,l:"En service",c:"#00D4AA"},
+        {v:maint,l:"En maintenance",c:"#F59E0B"},
+        {v:panne,l:"En panne",c:"#FF4D6D"},
+        {v:dispo+"%",l:"Disponibilité",c:"#A78BFA"},
+        {v:crit,l:"Risque critique",c:"#FF4D6D"},
+      ].map((k,i)=>(
+        <div key={i} style={S.kcard(k.c)}>
+          <div style={S.kval}>{k.v}</div>
+          <div style={S.klbl}>{k.l}</div>
+        </div>
+      ))}
+    </div>
+    <div style={{marginBottom:24,display:"flex",gap:12,flexWrap:"wrap"}}>
+      <button style={S.btn("#00D4AA")} onClick={exportPDF}>📄 Exporter PDF</button>
+      <button style={S.btn("#7C3AED")} onClick={()=>setOnglet("iot")}>📡 Surveillance IoT</button>
+      <button style={S.btn("#F59E0B")} onClick={()=>setOnglet("ia")}>🤖 Analyse IA</button>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24,marginBottom:24}}>
+      <div style={S.card}>
+        <div style={S.cardTitle}>📊 Répartition par statut</div>
+        <ResponsiveContainer width="100%" height={220}>
+          <PieChart>
+            <Pie data={pieStatuts} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({name,value})=>`${name}: ${value}`}>
+              {pieStatuts.map((_,i)=><Cell key={i} fill={COULEURS[i]}/>)}
+            </Pie>
+            <Tooltip contentStyle={{background:"#041225",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,color:"white"}}/>
+            <Legend wrapperStyle={{color:"#94A3B8",fontSize:12}}/>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={S.card}>
+        <div style={S.cardTitle}>🏥 Équipements par service</div>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={barServices}>
+            <XAxis dataKey="service" tick={{fontSize:11,fill:"#64748B"}}/>
+            <YAxis allowDecimals={false} tick={{fill:"#64748B"}}/>
+            <Tooltip contentStyle={{background:"#041225",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,color:"white"}}/>
+            <Bar dataKey="count" name="Équipements" fill="#00D4AA" radius={[4,4,0,0]}/>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+      <div style={S.card}>
+        <div style={S.cardTitle}>🔧 Statut maintenances</div>
+        <ResponsiveContainer width="100%" height={200}>
+          <PieChart>
+            <Pie data={pieMaint} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({name,value})=>`${name}: ${value}`}>
+              {pieMaint.map((_,i)=><Cell key={i} fill={["#3B82F6","#F59E0B","#00D4AA"][i]}/>)}
+            </Pie>
+            <Tooltip contentStyle={{background:"#041225",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,color:"white"}}/>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={S.card}>
+        <div style={S.cardTitle}>⚠️ Risques élevés</div>
+        {equipements.filter(e=>e.scoreRisque>=50).sort((a,b)=>b.scoreRisque-a.scoreRisque).slice(0,4).map(e=>(
+          <div key={e.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:13,color:"white"}}>{e.nom}</div>
+              <div style={{fontSize:11,color:"#475569"}}>{e.service}</div>
+            </div>
+            <div style={{fontWeight:800,color:riskColor(e.scoreRisque),fontSize:18}}>{e.scoreRisque}%</div>
+          </div>
+        ))}
+        {equipements.filter(e=>e.scoreRisque>=50).length===0&&<div style={{color:"#475569",fontSize:13}}>✅ Aucun risque élevé</div>}
+      </div>
+    </div>
+  </div>
+));
+
+const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitoring,changerEquipMonitoring})=>{
+  const dernier=iotData.length>0?iotData[iotData.length-1]:null;
+  const chartData=iotData.slice(-15).map((d,i)=>({i,temperature:parseFloat(d.temperature)||0,vibration:parseFloat(d.vibration)||0}));
+  return(
+    <div>
+      <div style={{...S.card,display:"flex",alignItems:"center",gap:20,flexWrap:"wrap"}}>
+        <div style={{flex:1}}>
+          <label style={S.lbl}>Équipement à surveiller</label>
+          <select style={{...S.sel,maxWidth:320}} value={iotEquipId} onChange={e=>changerEquipMonitoring(parseInt(e.target.value))}>
+            {equipements.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}
+          </select>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+          <div style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:"0.1em"}}>Monitoring</div>
+          <button onClick={toggleMonitoring} style={{padding:"10px 28px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:14,background:monitoringActif?"#00D4AA":"rgba(255,255,255,0.08)",color:monitoringActif?"#020B18":"#64748B",boxShadow:monitoringActif?"0 0 20px rgba(0,212,170,0.4)":"none"}}>
+            {monitoringActif?"⏹️ Arrêter":"▶️ Démarrer"}
+          </button>
+          <div style={{fontSize:11,color:monitoringActif?"#00D4AA":"#334155",fontWeight:600}}>{monitoringActif?"● EN COURS":"○ INACTIF"}</div>
+        </div>
+      </div>
+      {monitoringActif?(
+        <>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:16,marginBottom:24}}>
+            {[
+              {icon:"🌡️",val:dernier?parseFloat(dernier.temperature).toFixed(1)+"°C":"--",lbl:"Température",c:"#FF4D6D",alerte:dernier&&parseFloat(dernier.temperature)>50},
+              {icon:"📳",val:dernier?parseFloat(dernier.vibration).toFixed(2)+" g":"--",lbl:"Vibration",c:"#A78BFA",alerte:dernier&&parseFloat(dernier.vibration)>0.7},
+              {icon:dernier?.actif?"⚡":"💤",val:dernier?.actif?"Actif":"Inactif",lbl:"État",c:dernier?.actif?"#00D4AA":"#475569",alerte:false},
+              {icon:dernier?.anomalie?"🚨":"✅",val:dernier?.anomalie?"ALERTE":"Normal",lbl:"Statut",c:dernier?.anomalie?"#FF4D6D":"#00D4AA",alerte:false},
+            ].map((k,i)=>(
+              <div key={i} style={{background:`${k.c}08`,border:`1px solid ${k.c}20`,borderRadius:12,padding:20,textAlign:"center"}}>
+                <div style={{fontSize:32}}>{k.icon}</div>
+                <div style={{fontSize:28,fontWeight:900,color:k.c,marginTop:4}}>{k.val}</div>
+                <div style={{fontSize:12,color:"#475569",marginTop:4}}>{k.lbl}</div>
+                {k.alerte&&<div style={{color:"#FF4D6D",fontSize:11,fontWeight:700,marginTop:4}}>⚠️ ANOMALIE</div>}
+              </div>
+            ))}
+          </div>
+          {chartData.length>0&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+              <div style={S.card}>
+                <div style={S.cardTitle}>🌡️ Évolution température</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={chartData}>
+                    <XAxis dataKey="i" hide/><YAxis domain={[0,100]} tick={{fill:"#64748B"}}/>
+                    <Tooltip contentStyle={{background:"#041225",border:"1px solid rgba(255,77,109,0.3)",borderRadius:8,color:"white"}} formatter={v=>`${v}°C`}/>
+                    <Line type="monotone" dataKey="temperature" stroke="#FF4D6D" strokeWidth={2} dot={false}/>
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={S.card}>
+                <div style={S.cardTitle}>📳 Évolution vibration</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={chartData}>
+                    <XAxis dataKey="i" hide/><YAxis domain={[0,2]} tick={{fill:"#64748B"}}/>
+                    <Tooltip contentStyle={{background:"#041225",border:"1px solid rgba(167,139,250,0.3)",borderRadius:8,color:"white"}} formatter={v=>`${v} g`}/>
+                    <Line type="monotone" dataKey="vibration" stroke="#A78BFA" strokeWidth={2} dot={false}/>
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </>
+      ):(
+        <div style={{...S.card,padding:48,textAlign:"center"}}>
+          <div style={{fontSize:48,marginBottom:16}}>📡</div>
+          <div style={{fontSize:18,fontWeight:700,color:"white",marginBottom:8}}>Monitoring désactivé</div>
+          <div style={{fontSize:14,color:"#475569",marginBottom:24}}>Appuyez sur "▶️ Démarrer" pour surveiller en temps réel.</div>
+          <button onClick={toggleMonitoring} style={{...S.btnSolid("#00D4AA"),fontSize:15,padding:"12px 32px"}}>▶️ Démarrer le monitoring</button>
+        </div>
+      )}
+      <div style={{...S.card,marginTop:24}}>
+        <div style={S.cardTitle}>📋 Historique des mesures ({iotData.length} entrées)</div>
+        {iotData.length===0?(
+          <div style={{textAlign:"center",padding:32,color:"#334155"}}><div style={{fontSize:32,marginBottom:8}}>📂</div><div>Aucune donnée disponible</div></div>
+        ):(
+          <table style={S.tbl}>
+            <thead><tr>{["Date & Heure","Température","Vibration","État","Anomalie"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {[...iotData].reverse().slice(0,15).map((d,i)=>(
+                <tr key={i}>
+                  <td style={{...S.td,fontSize:12,color:"#475569"}}>{formaterDate(d.timestamp)}</td>
+                  <td style={S.td}><span style={{color:parseFloat(d.temperature)>50?"#FF4D6D":"#00D4AA",fontWeight:700}}>{parseFloat(d.temperature).toFixed(1)}°C</span></td>
+                  <td style={S.td}><span style={{color:parseFloat(d.vibration)>0.7?"#FF4D6D":"#00D4AA",fontWeight:700}}>{parseFloat(d.vibration).toFixed(2)} g</span></td>
+                  <td style={S.td}>{d.panne?"🔴 En panne":d.actif==1?"⚡ En service":"💤 À l'arrêt"}</td>
+                  <td style={S.td}><span style={badge(d.anomalie?"HAUTE":"BASSE")}>{d.anomalie?"⚠️ Oui":"✅ Non"}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+});
+
+const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerEquipMonitoring,setOnglet,token})=>{
+  const [recherche,setRecherche]=useState("");
+  const [filtreStatut,setFiltreStatut]=useState("Tous");
+  const [showForm,setShowForm]=useState(false);
+  const [form,setForm]=useState({nom:"",marque:"",numeroSerie:"",service:"",statut:"En service",dateAcquisition:"",prochaineMaintenance:""});
+
+  const filtres=equipements.filter(e=>{
+    const r=recherche.toLowerCase();
+    return(e.nom?.toLowerCase().includes(r)||e.numeroSerie?.toLowerCase().includes(r)||e.service?.toLowerCase().includes(r))&&(filtreStatut==="Tous"||e.statut===filtreStatut);
+  });
+
+  async function sauvegarder(){
+    if(!form.nom||!form.numeroSerie) return;
+    try{
+      await fetch(`${API}/equipements`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify(form)});
+      setShowForm(false);setForm({nom:"",marque:"",numeroSerie:"",service:"",statut:"En service",dateAcquisition:"",prochaineMaintenance:""});
+      window.location.reload();
+    }catch{}
+  }
+
+  return(
+    <div>
+      <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <input style={{...S.inp,maxWidth:280}} placeholder="🔍 Rechercher..." value={recherche} onChange={e=>setRecherche(e.target.value)}/>
+        <select style={{...S.sel,maxWidth:180}} value={filtreStatut} onChange={e=>setFiltreStatut(e.target.value)}>
+          {["Tous","En service","En maintenance","En panne"].map(s=><option key={s}>{s}</option>)}
+        </select>
+        {peutModifier&&<button style={S.btn()} onClick={()=>setShowForm(true)}>+ Ajouter</button>}
+      </div>
+      <div style={S.card}>
+        <table style={S.tbl}>
+          <thead><tr>{["Équipement","N° Série","Service","Statut","Risque","Proch. Maint.","Actions"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <tbody>
+            {filtres.map(e=>(
+              <tr key={e.id}>
+                <td style={S.td}><div style={{fontWeight:600,color:"white"}}>{e.nom}</div><div style={{fontSize:11,color:"#334155"}}>{e.marque}</div></td>
+                <td style={S.td}><code style={{background:"rgba(0,212,170,0.08)",color:"#00D4AA",padding:"2px 8px",borderRadius:4,fontSize:11}}>{e.numeroSerie}</code></td>
+                <td style={S.td}>{e.service}</td>
+                <td style={S.td}><span style={badge(e.statut)}>{e.statut}</span></td>
+                <td style={S.td}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:60,height:5,background:"rgba(255,255,255,0.08)",borderRadius:3}}>
+                      <div style={{width:`${e.scoreRisque}%`,height:"100%",background:riskColor(e.scoreRisque),borderRadius:3}}/>
+                    </div>
+                    <span style={{fontWeight:700,color:riskColor(e.scoreRisque),fontSize:13}}>{e.scoreRisque}%</span>
+                  </div>
+                </td>
+                <td style={S.td}><span style={{color:"#475569"}}>{e.prochaineMaintenance||"—"}</span></td>
+                <td style={S.td}>
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>{changerEquipMonitoring(e.id);setOnglet("iot");}} style={{background:"rgba(59,130,246,0.12)",color:"#60A5FA",border:"1px solid rgba(59,130,246,0.2)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>📡</button>
+                    <button onClick={()=>setOnglet("ia")} style={{background:"rgba(245,158,11,0.12)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.2)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>🤖</button>
+                    {peutModifier&&<button onClick={()=>supprimerEquipement(e.id)} style={{background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>✕</button>}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filtres.length===0&&<div style={{textAlign:"center",padding:40,color:"#334155"}}>Aucun équipement trouvé</div>}
+      </div>
+      {showForm&&(
+        <div style={S.overlay}>
+          <div style={S.modal}>
+            <h3 style={{marginBottom:20,color:"white",fontSize:18}}>➕ Nouvel équipement</h3>
+            <div style={S.fgrid}>
+              <div><label style={S.lbl}>Nom *</label><input style={S.inp} placeholder="Ex: Electrocardiographe" value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div>
+              <div><label style={S.lbl}>Marque</label><input style={S.inp} placeholder="Ex: GE Healthcare" value={form.marque} onChange={e=>setForm(p=>({...p,marque:e.target.value}))}/></div>
+              <div><label style={S.lbl}>N° Série *</label><input style={S.inp} placeholder="Ex: ECG-2024-001" value={form.numeroSerie} onChange={e=>setForm(p=>({...p,numeroSerie:e.target.value}))}/></div>
+              <div><label style={S.lbl}>Service</label><input style={S.inp} placeholder="Ex: Cardiologie" value={form.service} onChange={e=>setForm(p=>({...p,service:e.target.value}))}/></div>
+              <div><label style={S.lbl}>Date acquisition</label><input style={S.inp} type="date" value={form.dateAcquisition} onChange={e=>setForm(p=>({...p,dateAcquisition:e.target.value}))}/></div>
+              <div><label style={S.lbl}>Prochaine maintenance</label><input style={S.inp} type="date" value={form.prochaineMaintenance} onChange={e=>setForm(p=>({...p,prochaineMaintenance:e.target.value}))}/></div>
+              <div><label style={S.lbl}>Statut</label><select style={S.sel} value={form.statut} onChange={e=>setForm(p=>({...p,statut:e.target.value}))}><option>En service</option><option>En maintenance</option><option>En panne</option></select></div>
+            </div>
+            <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
+              <button style={S.btnO} onClick={()=>setShowForm(false)}>Annuler</button>
+              <button style={S.btnSolid()} onClick={sauvegarder}>Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+const Maintenances = memo(({maintenances,equipements,ajouterMaintenance})=>{
+  const [showForm,setShowForm]=useState(false);
+  const [form,setForm]=useState({equipementId:"",type:"Préventive",statut:"Planifiée",datePlanifiee:"",technicien:"",description:""});
+  function sauvegarder(){ajouterMaintenance(form,()=>{setShowForm(false);setForm({equipementId:"",type:"Préventive",statut:"Planifiée",datePlanifiee:"",technicien:"",description:""});});}
+  return(
+    <div>
+      <div style={{marginBottom:20}}><button style={S.btn()} onClick={()=>setShowForm(true)}>+ Planifier une maintenance</button></div>
+      <div style={S.card}>
+        <table style={S.tbl}>
+          <thead><tr>{["Équipement","Type","Date","Technicien","Description","Statut"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <tbody>
+            {maintenances.map(m=>(
+              <tr key={m.id}>
+                <td style={S.td}><div style={{fontWeight:600,color:"white"}}>{m.equipementNom}</div></td>
+                <td style={S.td}><span style={{background:m.type==="Préventive"?"rgba(59,130,246,0.12)":"rgba(255,77,109,0.1)",color:m.type==="Préventive"?"#60A5FA":"#FF4D6D",border:`1px solid ${m.type==="Préventive"?"rgba(59,130,246,0.25)":"rgba(255,77,109,0.25)"}`,padding:"3px 10px",borderRadius:999,fontSize:11,fontWeight:600}}>{m.type}</span></td>
+                <td style={S.td}>{m.datePlanifiee}</td>
+                <td style={S.td}>{m.technicien||"—"}</td>
+                <td style={{...S.td,color:"#475569"}}>{m.description}</td>
+                <td style={S.td}><span style={badge(m.statut)}>{m.statut}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {maintenances.length===0&&<div style={{textAlign:"center",padding:40,color:"#334155"}}>Aucune maintenance</div>}
+      </div>
+      {showForm&&(
+        <div style={S.overlay}>
+          <div style={S.modal}>
+            <h3 style={{marginBottom:20,color:"white",fontSize:18}}>🔧 Planifier une maintenance</h3>
+            <div style={S.fgrid}>
+              <div style={{gridColumn:"1 / -1"}}><label style={S.lbl}>Équipement *</label>
+                <select style={S.sel} value={form.equipementId} onChange={e=>setForm(p=>({...p,equipementId:e.target.value}))}>
+                  <option value="">-- Sélectionner --</option>
+                  {equipements.map(e=><option key={e.id} value={e.id}>{e.nom} ({e.numeroSerie})</option>)}
+                </select>
+              </div>
+              <div><label style={S.lbl}>Type</label><select style={S.sel} value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}><option>Préventive</option><option>Corrective</option><option>Calibration</option></select></div>
+              <div><label style={S.lbl}>Date *</label><input style={S.inp} type="date" value={form.datePlanifiee} onChange={e=>setForm(p=>({...p,datePlanifiee:e.target.value}))}/></div>
+              <div><label style={S.lbl}>Technicien</label><input style={S.inp} placeholder="Nom du technicien" value={form.technicien} onChange={e=>setForm(p=>({...p,technicien:e.target.value}))}/></div>
+              <div><label style={S.lbl}>Statut</label><select style={S.sel} value={form.statut} onChange={e=>setForm(p=>({...p,statut:e.target.value}))}><option>Planifiée</option><option>En cours</option><option>Terminée</option></select></div>
+              <div style={{gridColumn:"1 / -1"}}><label style={S.lbl}>Description</label><input style={S.inp} placeholder="Description" value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))}/></div>
+            </div>
+            <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
+              <button style={S.btnO} onClick={()=>setShowForm(false)}>Annuler</button>
+              <button style={S.btnSolid()} onClick={sauvegarder}>Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+const Calendrier = memo(({maintenances})=>{
+  const [moisCal,setMoisCal]=useState(new Date());
+  function joursDuMois(d){const y=d.getFullYear(),m=d.getMonth();const p=new Date(y,m,1),l=new Date(y,m+1,0);const j=[];for(let i=0;i<p.getDay();i++) j.push(null);for(let dd=1;dd<=l.getDate();dd++) j.push(new Date(y,m,dd));return j;}
+  const jours=joursDuMois(moisCal);
+  const nomsJ=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
+  const retard=maintenances.filter(m=>new Date(m.datePlanifiee)<new Date()&&m.statut==="Planifiée");
+  return(
+    <div>
+      {retard.length>0&&(<div style={{background:"rgba(255,77,109,0.08)",border:"1px solid rgba(255,77,109,0.2)",borderRadius:10,padding:16,marginBottom:20}}><div style={{fontWeight:700,color:"#FF4D6D",marginBottom:8}}>⚠️ {retard.length} maintenance(s) en retard !</div>{retard.map(m=><div key={m.id} style={{fontSize:13,color:"rgba(255,77,109,0.8)"}}>• {m.equipementNom} — prévu le {m.datePlanifiee}</div>)}</div>)}
+      <div style={S.card}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <button style={S.btnO} onClick={()=>setMoisCal(new Date(moisCal.getFullYear(),moisCal.getMonth()-1))}>← Précédent</button>
+          <div style={{fontSize:18,fontWeight:700,color:"white",textTransform:"capitalize"}}>{moisCal.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div>
+          <button style={S.btnO} onClick={()=>setMoisCal(new Date(moisCal.getFullYear(),moisCal.getMonth()+1))}>Suivant →</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+          {nomsJ.map(j=><div key={j} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"#334155",padding:"8px 0",textTransform:"uppercase",letterSpacing:"0.05em"}}>{j}</div>)}
+          {jours.map((date,i)=>{
+            const maints=date?maintenances.filter(m=>m.datePlanifiee===date.toISOString().split("T")[0]):[];
+            const auj=date&&date.toDateString()===new Date().toDateString();
+            return(<div key={i} style={{minHeight:68,padding:6,borderRadius:8,background:auj?"rgba(0,212,170,0.08)":date?"rgba(255,255,255,0.02)":"transparent",border:auj?"1px solid rgba(0,212,170,0.3)":date?"1px solid rgba(255,255,255,0.04)":"none"}}>{date&&<><div style={{fontSize:13,fontWeight:auj?700:400,color:auj?"#00D4AA":"#64748B"}}>{date.getDate()}</div>{maints.map(m=><div key={m.id} style={{fontSize:9,padding:"2px 4px",borderRadius:3,marginTop:2,background:m.type==="Préventive"?"rgba(59,130,246,0.2)":"rgba(255,77,109,0.15)",color:m.type==="Préventive"?"#60A5FA":"#FF4D6D",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔧 {m.equipementNom}</div>)}</>}</div>);
+          })}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+const Alertes = memo(({alertes,equipements,lireAlerte,setOnglet})=>(
+  <div>
+    {alertes.length>0&&(<div style={S.card}><div style={S.cardTitle}>🔔 Alertes automatiques</div>{alertes.slice(0,10).map(a=>(<div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",marginBottom:8,borderRadius:8,background:a.estLue?"rgba(255,255,255,0.02)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.06)":"rgba(245,158,11,0.06)",border:`1px solid ${a.estLue?"rgba(255,255,255,0.05)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.2)":"rgba(245,158,11,0.2)"}`,opacity:a.estLue?0.6:1}}><div><div style={{fontWeight:700,color:a.severite==="CRITIQUE"?"#FF4D6D":"#F59E0B",fontSize:13}}>{a.severite==="CRITIQUE"?"🔴":"🟡"} {a.type} — Équipement #{a.equipement_id}</div><div style={{fontSize:12,color:"#475569",marginTop:4}}>{a.message}</div><div style={{fontSize:11,color:"#334155",marginTop:2}}>{formaterDate(a.createdAt)}</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={badge(a.severite)}>{a.severite}</span>{!a.estLue&&<button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>lireAlerte(a.id)}>Lue</button>}</div></div>))}</div>)}
+    {equipements.filter(e=>e.scoreRisque>=75).map(e=>(<div key={e.id} style={{background:"rgba(255,77,109,0.06)",border:"1px solid rgba(255,77,109,0.2)",borderRadius:10,padding:16,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontWeight:700,color:"#FF4D6D"}}>🔴 RISQUE CRITIQUE — {e.nom}</div><div style={{fontSize:13,color:"rgba(255,77,109,0.7)",marginTop:4}}>Service : {e.service} | Score : {e.scoreRisque}%</div></div><button style={S.btnSolid("#FF4D6D")} onClick={()=>setOnglet("maintenances")}>Planifier</button></div>))}
+    {alertes.length===0&&equipements.filter(e=>e.scoreRisque>=50).length===0&&(<div style={{...S.card,padding:32,textAlign:"center"}}><div style={{fontSize:18,color:"#00D4AA",fontWeight:700}}>✅ Aucune alerte active</div></div>)}
+  </div>
+));
+
+const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,reactiverUtilisateur,ajouterUtilisateur})=>{
+  const [showForm,setShowForm]=useState(false);
+  const [form,setForm]=useState({nom:"",prenom:"",email:"",password:"",role:"TECHNICIEN"});
+  function sauvegarder(){ajouterUtilisateur(form,()=>{setShowForm(false);setForm({nom:"",prenom:"",email:"",password:"",role:"TECHNICIEN"});});}
+  return(
+    <div>
+      <div style={{marginBottom:20}}><button style={S.btn()} onClick={()=>setShowForm(true)}>+ Ajouter un utilisateur</button></div>
+      <div style={S.card}>
+        <table style={S.tbl}>
+          <thead><tr>{["Nom","Email","Rôle","Statut","Créé le","Actions"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <tbody>{utilisateurs.map(u=>(<tr key={u.id} style={{opacity:u.actif?1:0.5}}><td style={S.td}><div style={{fontWeight:600,color:"white"}}>{u.prenom} {u.nom}</div></td><td style={{...S.td,color:"#475569"}}>{u.email}</td><td style={S.td}><span style={badge(u.role)}>{u.role}</span></td><td style={S.td}><span style={badge(u.actif?"En service":"En panne")}>{u.actif?"✅ Actif":"❌ Inactif"}</span></td><td style={{...S.td,color:"#334155"}}>{u.createdAt?.split("T")[0]||u.createdAt}</td><td style={S.td}><div style={{display:"flex",gap:6}}>{u.id!==currentUserId&&u.actif===1&&<button onClick={()=>desactiverUtilisateur(u.id)} style={{background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>🚫 Désactiver</button>}{u.actif===0&&<button onClick={()=>reactiverUtilisateur(u.id)} style={{background:"rgba(0,212,170,0.1)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>✅ Réactiver</button>}{u.id===currentUserId&&<span style={{fontSize:11,color:"#334155",fontStyle:"italic"}}>Votre compte</span>}</div></td></tr>))}</tbody>
+        </table>
+      </div>
+      {showForm&&(<div style={S.overlay}><div style={S.modal}><h3 style={{marginBottom:20,color:"white",fontSize:18}}>👤 Nouvel utilisateur</h3><div style={S.fgrid}><div><label style={S.lbl}>Nom *</label><input style={S.inp} placeholder="Nom de famille" value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div><div><label style={S.lbl}>Prénom</label><input style={S.inp} placeholder="Prénom" value={form.prenom} onChange={e=>setForm(p=>({...p,prenom:e.target.value}))}/></div><div><label style={S.lbl}>Email *</label><input style={S.inp} type="email" placeholder="email@hopital.dz" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))}/></div><div><label style={S.lbl}>Mot de passe *</label><input style={S.inp} type="password" placeholder="Minimum 6 caractères" value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))}/></div><div><label style={S.lbl}>Rôle</label><select style={S.sel} value={form.role} onChange={e=>setForm(p=>({...p,role:e.target.value}))}><option value="TECHNICIEN">Technicien</option><option value="INGENIEUR">Ingénieur Biomédical</option><option value="ADMIN">Administrateur</option></select></div></div><div style={{display:"flex",gap:12,justifyContent:"flex-end"}}><button style={S.btnO} onClick={()=>setShowForm(false)}>Annuler</button><button style={S.btnSolid()} onClick={sauvegarder}>Créer</button></div></div></div>)}
+    </div>
+  );
+});
+
+// ════════════════════════════════════════════════════════════
+// APP + PLATEFORME
+// ════════════════════════════════════════════════════════════
+export default function App(){
+  const [user,setUser]=useState(null);
+  const [token,setToken]=useState(null);
+  const [preferences,setPreferences]=useState({monitoring_actif:0,monitoring_equip_id:1});
+  useEffect(()=>{const t=localStorage.getItem("token");const u=localStorage.getItem("user");const p=localStorage.getItem("preferences");if(t&&u){setToken(t);setUser(JSON.parse(u));setPreferences(p?JSON.parse(p):{monitoring_actif:0,monitoring_equip_id:1});}},[]);
+  if(!user||!token) return <PageConnexion onLogin={(u,t,p)=>{setUser(u);setToken(t);setPreferences(p);}}/>;
+  return <Plateforme user={user} token={token} prefInitiales={preferences} onLogout={()=>{localStorage.clear();setUser(null);setToken(null);}}/>;
+}
+
+function Plateforme({user,token,prefInitiales,onLogout}){
+  const [onglet,setOnglet]=useState("dashboard");
+  const [equipements,setEquipements]=useState([]);
+  const [maintenances,setMaintenances]=useState([]);
+  const [alertes,setAlertes]=useState([]);
+  const [iotData,setIotData]=useState([]);
+  const [utilisateurs,setUtilisateurs]=useState([]);
+  const [chargement,setChargement]=useState(true);
+  const [message,setMessage]=useState(null);
+  const [monitoringActif,setMonitoringActif]=useState(prefInitiales?.monitoring_actif===1||prefInitiales?.monitoring_actif===true);
+  const [iotEquipId,setIotEquipId]=useState(prefInitiales?.monitoring_equip_id||1);
+  const iotTimerRef=useRef(null);
+  const hdrs=useCallback(()=>({"Content-Type":"application/json","Authorization":`Bearer ${token}`}),[token]);
+
+  useEffect(()=>{charger();},[]);
+  useEffect(()=>{clearInterval(iotTimerRef.current);if(monitoringActif){chargerIot(iotEquipId);iotTimerRef.current=setInterval(()=>chargerIot(iotEquipId),5000);}return()=>clearInterval(iotTimerRef.current);},[monitoringActif,iotEquipId]);
+
+  async function charger(){
+    try{setChargement(true);const h=hdrs();const [r1,r2,r3]=await Promise.all([fetch(`${API}/equipements`,{headers:h}),fetch(`${API}/maintenances`,{headers:h}),fetch(`${API}/alertes`,{headers:h})]);if(r1.status===401){onLogout();return;}setEquipements(await r1.json());setMaintenances(await r2.json());setAlertes(await r3.json());if(user.role==="ADMIN"){const r4=await fetch(`${API}/utilisateurs`,{headers:h});setUtilisateurs(await r4.json());}}catch{toast("❌ Serveur inaccessible","e");}finally{setChargement(false);}
+  }
+  async function chargerIot(id){try{const r=await fetch(`${API}/capteurs/${id}`,{headers:hdrs()});if(r.ok){const d=await r.json();if(Array.isArray(d))setIotData(d.reverse());}}catch{}}
+  function toast(t,type="s"){setMessage({t,type});setTimeout(()=>setMessage(null),3500);}
+  async function toggleMonitoring(){const n=!monitoringActif;setMonitoringActif(n);const p={monitoring_actif:n?1:0,monitoring_equip_id:iotEquipId};localStorage.setItem("preferences",JSON.stringify(p));try{await fetch(`${API}/preferences/monitoring`,{method:"POST",headers:hdrs(),body:JSON.stringify(p)});}catch{}toast(n?"▶️ Monitoring activé":"⏹️ Monitoring désactivé");}
+  async function changerEquipMonitoring(id){setIotEquipId(id);const p={monitoring_actif:monitoringActif?1:0,monitoring_equip_id:id};localStorage.setItem("preferences",JSON.stringify(p));try{await fetch(`${API}/preferences/monitoring`,{method:"POST",headers:hdrs(),body:JSON.stringify(p)});}catch{}}
+  async function supprimerEquipement(id){if(!window.confirm("Confirmer la suppression ?")) return;await fetch(`${API}/equipements/${id}`,{method:"DELETE",headers:hdrs()});setEquipements(p=>p.filter(e=>e.id!==id));toast("✅ Équipement supprimé.");}
+  async function ajouterMaintenance(form,onSuccess){if(!form.equipementId||!form.datePlanifiee){toast("⚠️ Équipement et date obligatoires.","e");return;}const eq=equipements.find(e=>e.id===parseInt(form.equipementId));try{const r=await fetch(`${API}/maintenances`,{method:"POST",headers:hdrs(),body:JSON.stringify({...form,equipementNom:eq?.nom})});const m=await r.json();setMaintenances(p=>[m,...p]);onSuccess();toast("✅ Maintenance planifiée !");}catch{toast("❌ Erreur","e");}}
+  async function ajouterUtilisateur(form,onSuccess){if(!form.nom||!form.email||!form.password){toast("⚠️ Champs obligatoires.","e");return;}try{const r=await fetch(`${API}/utilisateurs`,{method:"POST",headers:hdrs(),body:JSON.stringify(form)});if(!r.ok){const e=await r.json();toast("❌ "+e.erreur,"e");return;}onSuccess();charger();toast("✅ Utilisateur créé !");}catch{toast("❌ Erreur","e");}}
+  async function desactiverUtilisateur(id){if(!window.confirm("Désactiver ?")) return;await fetch(`${API}/utilisateurs/${id}/desactiver`,{method:"PATCH",headers:hdrs()});charger();toast("✅ Désactivé.");}
+  async function reactiverUtilisateur(id){if(!window.confirm("Réactiver ?")) return;await fetch(`${API}/utilisateurs/${id}/reactiver`,{method:"PATCH",headers:hdrs()});charger();toast("✅ Réactivé !");}
+  async function lireAlerte(id){await fetch(`${API}/alertes/${id}/lire`,{method:"PATCH",headers:hdrs()});setAlertes(p=>p.map(a=>a.id===id?{...a,estLue:1}:a));}
+
+  function exportPDF(){
+    const doc=new jsPDF();const now=new Date().toLocaleDateString("fr-FR");
+    const total=equipements.length,serv=equipements.filter(e=>e.statut==="En service").length;
+    const maint=equipements.filter(e=>e.statut==="En maintenance").length,panne=equipements.filter(e=>e.statut==="En panne").length;
+    const dispo=total>0?Math.round(serv/total*100):0,crit=equipements.filter(e=>e.scoreRisque>=75).length;
+    doc.setFillColor(2,11,24);doc.rect(0,0,210,35,"F");
+    doc.setTextColor(255,255,255);doc.setFontSize(18);doc.setFont("helvetica","bold");
+    doc.text("Rapport Parc Biomedical",14,15);
+    doc.setFontSize(10);doc.setFont("helvetica","normal");
+    doc.text(`Genere le ${now} par ${user.prenom} ${user.nom}`,14,25);
+    doc.setTextColor(2,11,24);doc.setFontSize(13);doc.setFont("helvetica","bold");
+    doc.text("Indicateurs cles",14,48);
+    autoTable(doc,{startY:53,head:[["Indicateur","Valeur"]],body:[["Total",total],["En service",serv],["En maintenance",maint],["En panne",panne],["Disponibilite",dispo+"%"],["Risque critique",crit]],theme:"grid",headStyles:{fillColor:[0,40,30],textColor:255}});
+    doc.text("Equipements",14,doc.lastAutoTable.finalY+12);
+    autoTable(doc,{startY:doc.lastAutoTable.finalY+17,head:[["Nom","Marque","N Serie","Service","Statut","Risque"]],body:equipements.map(e=>[e.nom,e.marque||"-",e.numeroSerie,e.service||"-",e.statut,e.scoreRisque+"%"]),theme:"striped",headStyles:{fillColor:[0,40,30],textColor:255},styles:{fontSize:9}});
+    doc.save(`rapport_biomedical_${now.replace(/\//g,"-")}.pdf`);
+    toast("✅ PDF exporté !");
+  }
+
+  const total=equipements.length,serv=equipements.filter(e=>e.statut==="En service").length;
+  const panne=equipements.filter(e=>e.statut==="En panne").length,maint=equipements.filter(e=>e.statut==="En maintenance").length;
+  const dispo=total>0?Math.round(serv/total*100):0,crit=equipements.filter(e=>e.scoreRisque>=75).length;
+  const alertesNonLues=alertes.filter(a=>!a.estLue).length;
+  const pieStatuts=[{name:"En service",value:serv},{name:"En maintenance",value:maint},{name:"En panne",value:panne}].filter(d=>d.value>0);
+  const barServices=Object.entries(equipements.reduce((a,e)=>{const s=e.service||"Autre";a[s]=(a[s]||0)+1;return a},{})).map(([service,count])=>({service,count}));
+  const pieMaint=[{name:"Planifiée",value:maintenances.filter(m=>m.statut==="Planifiée").length},{name:"En cours",value:maintenances.filter(m=>m.statut==="En cours").length},{name:"Terminée",value:maintenances.filter(m=>m.statut==="Terminée").length}].filter(d=>d.value>0);
+  const estAdmin=user.role==="ADMIN",peutModifier=user.role==="ADMIN"||user.role==="INGENIEUR";
+
+  const nav=[
+    {id:"dashboard",icon:"📊",label:"Tableau de bord"},
+    {id:"equipements",icon:"🏥",label:"Équipements"},
+    {id:"maintenances",icon:"🔧",label:"Maintenances"},
+    {id:"calendrier",icon:"📅",label:"Calendrier"},
+    {id:"iot",icon:"📡",label:`IoT ${monitoringActif?"● Actif":"○ Inactif"}`},
+    {id:"ia",icon:"🤖",label:"Intelligence IA"},
+    {id:"alertes",icon:"🔔",label:`Alertes${alertesNonLues>0?` (${alertesNonLues})`:""}`,badge:alertesNonLues>0},
+    ...(estAdmin?[{id:"utilisateurs",icon:"👥",label:"Utilisateurs"}]:[]),
+  ];
+
+  const titres={
+    dashboard:{title:"Tableau de bord",sub:"Vue d'ensemble du parc biomédical"},
+    equipements:{title:"Parc d'équipements",sub:`${total} équipements enregistrés`},
+    maintenances:{title:"Gestion des maintenances",sub:`${maintenances.length} interventions`},
+    calendrier:{title:"Calendrier de maintenance",sub:"Planning visuel"},
+    iot:{title:"Surveillance IoT",sub:monitoringActif?"● Monitoring actif":"○ Monitoring inactif"},
+    ia:{title:"Intelligence Artificielle",sub:"Prédiction de pannes & Détection d'anomalies"},
+    alertes:{title:"Alertes & Risques",sub:`${alertesNonLues} alerte(s) non lue(s)`},
+    utilisateurs:{title:"Gestion des utilisateurs",sub:`${utilisateurs.length} utilisateurs`},
+  };
+
+  if(chargement) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:16,fontFamily:"Segoe UI",position:"relative"}}>
+      <AnimatedBackground/>
+      <div style={{position:"relative",zIndex:1,textAlign:"center"}}>
+        <div style={{fontSize:56,marginBottom:16,filter:"drop-shadow(0 0 20px rgba(0,212,170,0.5))"}}>🏥</div>
+        <div style={{fontSize:20,fontWeight:800,color:"white",letterSpacing:"-0.02em"}}>Chargement...</div>
+        <div style={{fontSize:13,color:"#334155",marginTop:8}}>Connexion à la base de données</div>
+      </div>
+    </div>
+  );
+
+  return(
+    <div style={{...S.app,position:"relative"}}>
+      <AnimatedBackground/>
+      {message&&<div style={S.toast(message.type)}>{message.t}</div>}
+      <div style={S.sidebar}>
+        <div style={S.sidebarTop}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+            <span style={{fontSize:22}}>🏥</span>
+            <div><div style={S.sidebarTitle}>BioMed Plateforme</div><div style={S.sidebarSub}>Gestion Biomédicale</div></div>
+          </div>
+        </div>
+        <div style={{padding:"14px 20px",borderBottom:"1px solid rgba(0,212,170,0.08)",background:"rgba(0,212,170,0.02)"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"white"}}>{user.prenom} {user.nom}</div>
+          <div style={{marginTop:5}}><span style={badge(user.role)}>{user.role}</span></div>
+        </div>
+        <nav style={{flex:1,paddingTop:8,overflowY:"auto"}}>
+          {nav.map(item=>(
+            <div key={item.id} style={S.nav(onglet===item.id)} onClick={()=>setOnglet(item.id)}>
+              <span>{item.icon}</span>
+              <span style={{flex:1,fontSize:13}}>{item.label}</span>
+              {item.badge&&<span style={{background:"#FF4D6D",color:"white",borderRadius:"999px",fontSize:10,padding:"1px 6px",fontWeight:700}}>{alertesNonLues}</span>}
+            </div>
+          ))}
+        </nav>
+        <div style={{padding:"12px 20px",borderTop:"1px solid rgba(0,212,170,0.08)"}}>
+          <button onClick={onLogout} style={{width:"100%",background:"rgba(255,255,255,0.03)",color:"#475569",border:"1px solid rgba(255,255,255,0.06)",padding:"9px",borderRadius:8,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>🚪 Se déconnecter</button>
+          <div style={{fontSize:9,color:"#1E293B",textAlign:"center",marginTop:8,letterSpacing:"0.05em"}}>v9.0.0 ✅ IA INTÉGRÉE</div>
+        </div>
+      </div>
+      <div style={S.main}>
+        <div style={S.title}>{titres[onglet]?.title}</div>
+        <div style={S.sub}>{titres[onglet]?.sub}</div>
+        {onglet==="dashboard"&&<Dashboard equipements={equipements} maintenances={maintenances} pieStatuts={pieStatuts} barServices={barServices} pieMaint={pieMaint} total={total} serv={serv} maint={maint} panne={panne} dispo={dispo} crit={crit} exportPDF={exportPDF} setOnglet={setOnglet}/>}
+        {onglet==="equipements"&&<Equipements equipements={equipements} peutModifier={peutModifier} supprimerEquipement={supprimerEquipement} changerEquipMonitoring={changerEquipMonitoring} setOnglet={setOnglet} token={token}/>}
+        {onglet==="maintenances"&&<Maintenances maintenances={maintenances} equipements={equipements} ajouterMaintenance={ajouterMaintenance}/>}
+        {onglet==="calendrier"&&<Calendrier maintenances={maintenances}/>}
+        {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring}/>}
+        {onglet==="ia"&&<ModuleIA equipements={equipements} token={token} setOnglet={setOnglet}/>}
+        {onglet==="alertes"&&<Alertes alertes={alertes} equipements={equipements} lireAlerte={lireAlerte} setOnglet={setOnglet}/>}
+        {onglet==="utilisateurs"&&estAdmin&&<Utilisateurs utilisateurs={utilisateurs} currentUserId={user.id} desactiverUtilisateur={desactiverUtilisateur} reactiverUtilisateur={reactiverUtilisateur} ajouterUtilisateur={ajouterUtilisateur}/>}
+      </div>
+    </div>
+  );
+}
