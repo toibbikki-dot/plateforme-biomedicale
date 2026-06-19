@@ -3,7 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const API    = "http://localhost:3001/api"; 
+const API    = "http://localhost:3001/api";
 const API_IA = "http://localhost:5001/ia";
 const COULEURS = ["#00D4AA","#F59E0B","#FF4D6D","#7C3AED","#3B82F6","#EC4899"];
 
@@ -103,7 +103,7 @@ const S = {
 // ════════════════════════════════════════════════════════════
 // PAGE CONNEXION
 // ════════════════════════════════════════════════════════════
-function PageConnexion({onLogin}) {
+function PageConnexion({onLogin,onGoToInscription}) {
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
   const [erreur,setErreur]=useState("");
@@ -118,8 +118,9 @@ function PageConnexion({onLogin}) {
       if(!res.ok){setErreur(data.erreur||"Erreur de connexion.");return;}
       localStorage.setItem("token",data.token);
       localStorage.setItem("user",JSON.stringify(data.user));
+      localStorage.setItem("organisation",JSON.stringify(data.organisation||null));
       localStorage.setItem("preferences",JSON.stringify(data.preferences||{monitoring_actif:0,monitoring_equip_id:1}));
-      onLogin(data.user,data.token,data.preferences||{monitoring_actif:0,monitoring_equip_id:1});
+      onLogin(data.user,data.token,data.preferences||{monitoring_actif:0,monitoring_equip_id:1},data.organisation||null);
     }catch{setErreur("Impossible de contacter le serveur.");}
     finally{setChargement(false);}
   }
@@ -146,18 +147,163 @@ function PageConnexion({onLogin}) {
           <button onClick={seConnecter} disabled={chargement} style={{width:"100%",padding:"13px",background:chargement?"rgba(0,212,170,0.3)":"#00D4AA",color:"#020B18",border:"none",borderRadius:10,fontSize:15,fontWeight:800,cursor:chargement?"not-allowed":"pointer",boxShadow:chargement?"none":"0 0 20px rgba(0,212,170,0.3)"}}>
             {chargement?"Connexion...":"→ Se connecter"}
           </button>
-          <div style={{marginTop:28,paddingTop:20,borderTop:"1px solid rgba(255,255,255,0.05)"}}>
-            <div style={{fontSize:10,fontWeight:700,color:"#334155",marginBottom:12,textTransform:"uppercase",letterSpacing:"0.1em"}}>Comptes de test</div>
+          <div style={{marginTop:24,textAlign:"center"}}>
+            <span style={{fontSize:13,color:"#475569"}}>Pas encore de compte ? </span>
+            <span onClick={onGoToInscription} style={{fontSize:13,color:"#00D4AA",fontWeight:700,cursor:"pointer"}}>Créez-en un</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// PAGE INSCRIPTION — 3 modes : Individuel / Créer organisation / Rejoindre
+// ════════════════════════════════════════════════════════════
+function PageInscription({onLogin,onRetourConnexion}) {
+  const [mode,setMode]=useState(null); // null | "INDIVIDUEL" | "CREER_ORGANISATION" | "REJOINDRE_ORGANISATION"
+  const [form,setForm]=useState({nom:"",prenom:"",email:"",password:"",nomOrganisation:"",codeInvitation:""});
+  const [erreur,setErreur]=useState("");
+  const [chargement,setChargement]=useState(false);
+  const [codeGenere,setCodeGenere]=useState(null);
+
+  async function sInscrire() {
+    if(!form.nom||!form.email||!form.password){setErreur("Veuillez remplir tous les champs obligatoires.");return;}
+    if(mode==="CREER_ORGANISATION" && !form.nomOrganisation){setErreur("Le nom de l'organisation est obligatoire.");return;}
+    if(mode==="REJOINDRE_ORGANISATION" && !form.codeInvitation){setErreur("Le code d'invitation est obligatoire.");return;}
+    setChargement(true);setErreur("");
+    try {
+      const res=await fetch(`${API}/auth/inscription`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...form,mode})});
+      const data=await res.json();
+      if(!res.ok){setErreur(data.erreur||"Erreur lors de l'inscription.");return;}
+      if(data.codeGenere){
+        setCodeGenere(data.codeGenere);
+        // On garde les infos en mémoire pour finaliser la connexion après que l'utilisateur ait vu son code
+        window.__pendingLogin = {user:data.user, token:data.token, preferences:data.preferences, organisation:data.organisation};
+        return;
+      }
+      localStorage.setItem("token",data.token);
+      localStorage.setItem("user",JSON.stringify(data.user));
+      localStorage.setItem("organisation",JSON.stringify(data.organisation||null));
+      localStorage.setItem("preferences",JSON.stringify(data.preferences||{monitoring_actif:0,monitoring_equip_id:1}));
+      onLogin(data.user,data.token,data.preferences||{monitoring_actif:0,monitoring_equip_id:1},data.organisation||null);
+    }catch{setErreur("Impossible de contacter le serveur.");}
+    finally{setChargement(false);}
+  }
+
+  function continuerApresCode(){
+    const p=window.__pendingLogin;
+    if(!p) return;
+    localStorage.setItem("token",p.token);
+    localStorage.setItem("user",JSON.stringify(p.user));
+    localStorage.setItem("organisation",JSON.stringify(p.organisation||null));
+    localStorage.setItem("preferences",JSON.stringify(p.preferences||{monitoring_actif:0,monitoring_equip_id:1}));
+    onLogin(p.user,p.token,p.preferences,p.organisation);
+  }
+
+  // ─── ÉCRAN : code d'invitation généré, à afficher avant de continuer ───
+  if(codeGenere){
+    return (
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",fontFamily:"'Segoe UI',sans-serif"}}>
+        <AnimatedBackground/>
+        <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:460,padding:"0 24px",textAlign:"center"}}>
+          <div style={{background:"rgba(4,18,37,0.9)",backdropFilter:"blur(20px)",borderRadius:20,padding:"40px 36px",border:"1px solid rgba(0,212,170,0.2)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
+            <div style={{fontSize:44,marginBottom:12}}>🎉</div>
+            <h2 style={{color:"white",fontSize:20,marginBottom:8}}>Organisation créée !</h2>
+            <p style={{color:"#94A3B8",fontSize:13,marginBottom:20}}>Partagez ce code à vos collègues (ingénieurs, techniciens) pour qu'ils rejoignent votre espace de travail.</p>
+            <div style={{background:"rgba(0,212,170,0.1)",border:"2px dashed rgba(0,212,170,0.4)",borderRadius:12,padding:"20px",marginBottom:24}}>
+              <div style={{fontSize:11,color:"#475569",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Code d'invitation</div>
+              <div style={{fontSize:32,fontWeight:900,color:"#00D4AA",letterSpacing:"0.15em"}}>{codeGenere}</div>
+            </div>
+            <button onClick={continuerApresCode} style={{width:"100%",padding:"13px",background:"#00D4AA",color:"#020B18",border:"none",borderRadius:10,fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 0 20px rgba(0,212,170,0.3)"}}>
+              → Accéder à ma plateforme
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── ÉCRAN : choix du mode (si aucun mode sélectionné) ───
+  if(!mode){
+    return (
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",fontFamily:"'Segoe UI',sans-serif"}}>
+        <AnimatedBackground/>
+        <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:520,padding:"0 24px"}}>
+          <div style={{textAlign:"center",marginBottom:32}}>
+            <h1 style={{fontSize:24,fontWeight:900,color:"white",margin:0}}>Créer votre compte</h1>
+            <p style={{fontSize:13,color:"#475569",marginTop:8}}>Choisissez comment vous souhaitez utiliser la plateforme</p>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
             {[
-              {role:"Admin",email:"admin@biomedical.dz",pass:"admin123",c:"#A78BFA"},
-              {role:"Ingénieur",email:"ingenieur@biomedical.dz",pass:"ingenieur123",c:"#60A5FA"},
-              {role:"Technicien",email:"technicien@biomedical.dz",pass:"technicien123",c:"#00D4AA"},
-            ].map(u=>(
-              <div key={u.role} onClick={()=>{setEmail(u.email);setPassword(u.pass);}} style={{cursor:"pointer",padding:"8px 12px",borderRadius:8,marginBottom:6,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:12,fontWeight:700,color:u.c}}>{u.role}</span>
-                <span style={{fontSize:11,color:"#334155"}}>{u.email}</span>
+              {id:"INDIVIDUEL",icon:"👤",titre:"Utilisation individuelle",desc:"Gérez votre propre parc d'équipements en toute autonomie.",c:"#00D4AA"},
+              {id:"CREER_ORGANISATION",icon:"🏥",titre:"Créer une organisation",desc:"Vous êtes responsable d'un hôpital/service. Un code sera généré pour inviter votre équipe.",c:"#A78BFA"},
+              {id:"REJOINDRE_ORGANISATION",icon:"🔑",titre:"Rejoindre une organisation",desc:"Un administrateur vous a donné un code d'invitation.",c:"#60A5FA"},
+            ].map(opt=>(
+              <div key={opt.id} onClick={()=>setMode(opt.id)} style={{cursor:"pointer",background:"rgba(4,18,37,0.85)",backdropFilter:"blur(20px)",borderRadius:14,padding:"20px 24px",border:`1px solid ${opt.c}30`,display:"flex",alignItems:"center",gap:16,transition:"all 0.15s"}}>
+                <div style={{fontSize:32,width:50,height:50,borderRadius:12,background:`${opt.c}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{opt.icon}</div>
+                <div>
+                  <div style={{fontWeight:700,color:"white",fontSize:15,marginBottom:4}}>{opt.titre}</div>
+                  <div style={{fontSize:12,color:"#64748B"}}>{opt.desc}</div>
+                </div>
               </div>
             ))}
+          </div>
+          <div style={{marginTop:24,textAlign:"center"}}>
+            <span onClick={onRetourConnexion} style={{fontSize:13,color:"#475569",cursor:"pointer"}}>← Retour à la connexion</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── ÉCRAN : formulaire d'inscription selon le mode choisi ───
+  const titres={
+    INDIVIDUEL:{titre:"Compte individuel",icon:"👤",c:"#00D4AA"},
+    CREER_ORGANISATION:{titre:"Créer une organisation",icon:"🏥",c:"#A78BFA"},
+    REJOINDRE_ORGANISATION:{titre:"Rejoindre une organisation",icon:"🔑",c:"#60A5FA"},
+  };
+  const t=titres[mode];
+
+  return (
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",fontFamily:"'Segoe UI',sans-serif"}}>
+      <AnimatedBackground/>
+      <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:460,padding:"0 24px"}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{width:64,height:64,borderRadius:"50%",margin:"0 auto 12px",background:`${t.c}15`,border:`2px solid ${t.c}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>{t.icon}</div>
+          <h2 style={{color:"white",fontSize:20,margin:0}}>{t.titre}</h2>
+        </div>
+        <div style={{background:"rgba(4,18,37,0.85)",backdropFilter:"blur(20px)",borderRadius:20,padding:"32px",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
+          <div style={S.fgrid}>
+            <div><label style={S.lbl}>Nom *</label><input style={S.inp} value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div>
+            <div><label style={S.lbl}>Prénom</label><input style={S.inp} value={form.prenom} onChange={e=>setForm(p=>({...p,prenom:e.target.value}))}/></div>
+          </div>
+          <div style={{marginBottom:16}}>
+            <label style={S.lbl}>Email *</label>
+            <input type="email" style={S.inp} value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))}/>
+          </div>
+          <div style={{marginBottom:16}}>
+            <label style={S.lbl}>Mot de passe *</label>
+            <input type="password" style={S.inp} placeholder="Minimum 6 caractères" value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))}/>
+          </div>
+          {mode==="CREER_ORGANISATION" && (
+            <div style={{marginBottom:16}}>
+              <label style={S.lbl}>Nom de l'organisation *</label>
+              <input style={S.inp} placeholder="Ex: Hôpital Central de Ouagadougou" value={form.nomOrganisation} onChange={e=>setForm(p=>({...p,nomOrganisation:e.target.value}))}/>
+            </div>
+          )}
+          {mode==="REJOINDRE_ORGANISATION" && (
+            <div style={{marginBottom:16}}>
+              <label style={S.lbl}>Code d'invitation *</label>
+              <input style={{...S.inp,letterSpacing:"0.1em",fontWeight:700}} placeholder="Ex: AB3X9K2P" value={form.codeInvitation} onChange={e=>setForm(p=>({...p,codeInvitation:e.target.value.toUpperCase()}))}/>
+            </div>
+          )}
+          {erreur&&<div style={{background:"rgba(255,77,109,0.1)",border:"1px solid rgba(255,77,109,0.3)",borderRadius:8,padding:"10px 14px",marginBottom:16,color:"#FF4D6D",fontSize:13}}>❌ {erreur}</div>}
+          <button onClick={sInscrire} disabled={chargement} style={{width:"100%",padding:"13px",background:chargement?`${t.c}50`:t.c,color:"#020B18",border:"none",borderRadius:10,fontSize:15,fontWeight:800,cursor:chargement?"not-allowed":"pointer",marginBottom:12}}>
+            {chargement?"Création...":"→ Créer mon compte"}
+          </button>
+          <div style={{textAlign:"center"}}>
+            <span onClick={()=>setMode(null)} style={{fontSize:13,color:"#475569",cursor:"pointer"}}>← Changer de mode</span>
           </div>
         </div>
       </div>
@@ -794,12 +940,21 @@ const Alertes = memo(({alertes,equipements,lireAlerte,setOnglet})=>(
   </div>
 ));
 
-const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,reactiverUtilisateur,ajouterUtilisateur})=>{
+const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,reactiverUtilisateur,ajouterUtilisateur,organisation})=>{
   const [showForm,setShowForm]=useState(false);
   const [form,setForm]=useState({nom:"",prenom:"",email:"",password:"",role:"TECHNICIEN"});
   function sauvegarder(){ajouterUtilisateur(form,()=>{setShowForm(false);setForm({nom:"",prenom:"",email:"",password:"",role:"TECHNICIEN"});});}
   return(
     <div>
+      {organisation?.code_invitation&&(
+        <div style={{...S.card,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12,background:"rgba(0,212,170,0.05)",border:"1px solid rgba(0,212,170,0.2)"}}>
+          <div>
+            <div style={{fontSize:11,color:"#475569",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Code d'invitation de votre organisation</div>
+            <div style={{fontSize:13,color:"#94A3B8"}}>Partagez ce code à vos collègues pour qu'ils rejoignent <strong style={{color:"white"}}>{organisation.nom}</strong></div>
+          </div>
+          <div style={{fontSize:22,fontWeight:900,color:"#00D4AA",letterSpacing:"0.12em",background:"rgba(0,212,170,0.1)",padding:"8px 18px",borderRadius:8}}>{organisation.code_invitation}</div>
+        </div>
+      )}
       <div style={{marginBottom:20}}><button style={S.btn()} onClick={()=>setShowForm(true)}>+ Ajouter un utilisateur</button></div>
       <div style={S.card}>
         <table style={S.tbl}>
@@ -818,13 +973,23 @@ const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,rea
 export default function App(){
   const [user,setUser]=useState(null);
   const [token,setToken]=useState(null);
+  const [organisation,setOrganisation]=useState(null);
   const [preferences,setPreferences]=useState({monitoring_actif:0,monitoring_equip_id:1});
-  useEffect(()=>{const t=localStorage.getItem("token");const u=localStorage.getItem("user");const p=localStorage.getItem("preferences");if(t&&u){setToken(t);setUser(JSON.parse(u));setPreferences(p?JSON.parse(p):{monitoring_actif:0,monitoring_equip_id:1});}},[]);
-  if(!user||!token) return <PageConnexion onLogin={(u,t,p)=>{setUser(u);setToken(t);setPreferences(p);}}/>;
-  return <Plateforme user={user} token={token} prefInitiales={preferences} onLogout={()=>{localStorage.clear();setUser(null);setToken(null);}}/>;
+  const [ecran,setEcran]=useState("connexion"); // "connexion" | "inscription"
+  useEffect(()=>{
+    const t=localStorage.getItem("token");const u=localStorage.getItem("user");
+    const p=localStorage.getItem("preferences");const o=localStorage.getItem("organisation");
+    if(t&&u){setToken(t);setUser(JSON.parse(u));setPreferences(p?JSON.parse(p):{monitoring_actif:0,monitoring_equip_id:1});setOrganisation(o?JSON.parse(o):null);}
+  },[]);
+  function gererConnexion(u,t,p,o){setUser(u);setToken(t);setPreferences(p);setOrganisation(o||null);}
+  if(!user||!token){
+    if(ecran==="inscription") return <PageInscription onLogin={gererConnexion} onRetourConnexion={()=>setEcran("connexion")}/>;
+    return <PageConnexion onLogin={gererConnexion} onGoToInscription={()=>setEcran("inscription")}/>;
+  }
+  return <Plateforme user={user} token={token} organisation={organisation} prefInitiales={preferences} onLogout={()=>{localStorage.clear();setUser(null);setToken(null);setOrganisation(null);setEcran("connexion");}}/>;
 }
 
-function Plateforme({user,token,prefInitiales,onLogout}){
+function Plateforme({user,token,organisation,prefInitiales,onLogout}){
   const [onglet,setOnglet]=useState("dashboard");
   const [equipements,setEquipements]=useState([]);
   const [maintenances,setMaintenances]=useState([]);
@@ -882,6 +1047,7 @@ function Plateforme({user,token,prefInitiales,onLogout}){
   const barServices=Object.entries(equipements.reduce((a,e)=>{const s=e.service||"Autre";a[s]=(a[s]||0)+1;return a},{})).map(([service,count])=>({service,count}));
   const pieMaint=[{name:"Planifiée",value:maintenances.filter(m=>m.statut==="Planifiée").length},{name:"En cours",value:maintenances.filter(m=>m.statut==="En cours").length},{name:"Terminée",value:maintenances.filter(m=>m.statut==="Terminée").length}].filter(d=>d.value>0);
   const estAdmin=user.role==="ADMIN",peutModifier=user.role==="ADMIN"||user.role==="INGENIEUR";
+  const estModeOrganisation=organisation?.type==="ORGANISATION";
 
   const nav=[
     {id:"dashboard",icon:"📊",label:"Tableau de bord"},
@@ -891,7 +1057,7 @@ function Plateforme({user,token,prefInitiales,onLogout}){
     {id:"iot",icon:"📡",label:`IoT ${monitoringActif?"● Actif":"○ Inactif"}`},
     {id:"ia",icon:"🤖",label:"Intelligence IA"},
     {id:"alertes",icon:"🔔",label:`Alertes${alertesNonLues>0?` (${alertesNonLues})`:""}`,badge:alertesNonLues>0},
-    ...(estAdmin?[{id:"utilisateurs",icon:"👥",label:"Utilisateurs"}]:[]),
+    ...(estAdmin&&estModeOrganisation?[{id:"utilisateurs",icon:"👥",label:"Utilisateurs"}]:[]),
   ];
 
   const titres={
@@ -924,7 +1090,7 @@ function Plateforme({user,token,prefInitiales,onLogout}){
         <div style={S.sidebarTop}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
             <span style={{fontSize:22}}>🏥</span>
-            <div><div style={S.sidebarTitle}>BioMed Plateforme</div><div style={S.sidebarSub}>Gestion Biomédicale</div></div>
+            <div><div style={S.sidebarTitle}>BioMed Plateforme</div><div style={S.sidebarSub}>{organisation?.nom||"Gestion Biomédicale"}</div></div>
           </div>
         </div>
         <div style={{padding:"14px 20px",borderBottom:"1px solid rgba(0,212,170,0.08)",background:"rgba(0,212,170,0.02)"}}>
@@ -955,7 +1121,7 @@ function Plateforme({user,token,prefInitiales,onLogout}){
         {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring}/>}
         {onglet==="ia"&&<ModuleIA equipements={equipements} token={token} setOnglet={setOnglet}/>}
         {onglet==="alertes"&&<Alertes alertes={alertes} equipements={equipements} lireAlerte={lireAlerte} setOnglet={setOnglet}/>}
-        {onglet==="utilisateurs"&&estAdmin&&<Utilisateurs utilisateurs={utilisateurs} currentUserId={user.id} desactiverUtilisateur={desactiverUtilisateur} reactiverUtilisateur={reactiverUtilisateur} ajouterUtilisateur={ajouterUtilisateur}/>}
+        {onglet==="utilisateurs"&&estAdmin&&estModeOrganisation&&<Utilisateurs utilisateurs={utilisateurs} currentUserId={user.id} desactiverUtilisateur={desactiverUtilisateur} reactiverUtilisateur={reactiverUtilisateur} ajouterUtilisateur={ajouterUtilisateur} organisation={organisation}/>}
       </div>
     </div>
   );
