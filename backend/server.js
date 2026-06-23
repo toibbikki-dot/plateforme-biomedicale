@@ -9,12 +9,19 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "biomedical_secret_key_2026";
 
-app.use(cors({
-  origin: ['https://plateforme-biomedicale.vercel.app', 'https://plateforme-biomedicale-b4ut559hh-tgbm.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
+const corsOptions = {
+  origin: [
+    'https://plateforme-biomedicale.vercel.app',
+    'https://plateforme-biomedicale-b4ut559hh-tgbm.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
-}));
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // ════════════════════════════════════════════════════════════
