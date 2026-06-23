@@ -1,0 +1,15 @@
+node_modules/
+.env
+.env.local
+.env.production
+*.db
+*.sqlite
+*.sqlite3
+biomedical.db
+*.log
+npm-debug.log*
+dist/
+build/
+.DS_Store
+.vscode/
+.idea/
