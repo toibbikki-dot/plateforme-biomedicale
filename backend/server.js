@@ -98,16 +98,48 @@ db.exec(`
     FOREIGN KEY (organisation_id) REFERENCES organisations(id)
   );
 
+  -- Table de configuration des capteurs par équipement
+  CREATE TABLE IF NOT EXISTS equipement_capteurs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    equipement_id INTEGER UNIQUE NOT NULL,
+    organisation_id INTEGER NOT NULL,
+    param1_nom TEXT DEFAULT 'Paramètre 1',
+    param1_unite TEXT DEFAULT '',
+    param2_nom TEXT DEFAULT 'Paramètre 2',
+    param2_unite TEXT DEFAULT '',
+    param3_nom TEXT DEFAULT 'Paramètre 3',
+    param3_unite TEXT DEFAULT '',
+    param4_nom TEXT DEFAULT 'Paramètre 4',
+    param4_unite TEXT DEFAULT '',
+    param5_nom TEXT DEFAULT 'Paramètre 5',
+    param5_unite TEXT DEFAULT '',
+    param6_nom TEXT DEFAULT 'Paramètre 6',
+    param6_unite TEXT DEFAULT '',
+    param7_nom TEXT DEFAULT 'Paramètre 7',
+    param7_unite TEXT DEFAULT '',
+    param8_nom TEXT DEFAULT 'Paramètre 8',
+    param8_unite TEXT DEFAULT '',
+    nb_capteurs_actifs INTEGER DEFAULT 0,
+    FOREIGN KEY (equipement_id) REFERENCES equipements(id)
+  );
+
+  -- Table IoT modifiée (données flexibles)
   CREATE TABLE IF NOT EXISTS iot_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     organisation_id INTEGER NOT NULL,
     equipement_id INTEGER,
-    temperature REAL,
-    vibration REAL,
-    actif INTEGER,
-    anomalie INTEGER,
+    etat INTEGER,
     panne INTEGER,
-    timestamp TEXT DEFAULT (datetime('now','localtime'))
+    param1 REAL,
+    param2 REAL,
+    param3 REAL,
+    param4 REAL,
+    param5 REAL,
+    param6 REAL,
+    param7 REAL,
+    param8 REAL,
+    timestamp TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (equipement_id) REFERENCES equipements(id)
   );
 
   CREATE TABLE IF NOT EXISTS preferences (
@@ -290,39 +322,49 @@ app.post("/api/auth/login", (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
-// IOT — Réception des données ESP32
+// IOT — Réception des données ESP32 (version dynamique)
 // ════════════════════════════════════════════════════════════
 app.post("/api/capteurs", (req, res) => {
-  const { organisation_id, equipement_id, temperature, vibration, actif, anomalie, panne } = req.body;
+  const { 
+    organisation_id, 
+    equipement_id, 
+    etat, 
+    panne,
+    param1, param2, param3, param4,
+    param5, param6, param7, param8
+  } = req.body;
   
   if (!organisation_id || !equipement_id) {
     return res.status(400).json({ erreur: "organisation_id et equipement_id sont obligatoires" });
   }
 
-  console.log(`📡 IoT [Org #${organisation_id}] Équipement ${equipement_id} | Temp: ${temperature}°C | Vib: ${vibration}g`);
+  console.log(`📡 IoT [Org #${organisation_id}] Équipement ${equipement_id}`);
 
   try {
     db.prepare(`
-      INSERT INTO iot_data (organisation_id,equipement_id,temperature,vibration,actif,anomalie,panne,timestamp) 
-      VALUES (?,?,?,?,?,?,?,datetime('now','localtime'))
-    `).run(organisation_id, equipement_id, temperature, vibration, actif ? 1 : 0, anomalie ? 1 : 0, panne ? 1 : 0);
+      INSERT INTO iot_data (
+        organisation_id, equipement_id, etat, panne,
+        param1, param2, param3, param4, param5, param6, param7, param8,
+        timestamp
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+    `).run(
+      organisation_id, equipement_id, 
+      etat ? 1 : 0, panne ? 1 : 0,
+      param1, param2, param3, param4, param5, param6, param7, param8
+    );
 
-    if (anomalie || panne) {
-      const severite = panne ? "CRITIQUE" : temperature > 60 ? "HAUTE" : "MOYENNE";
-      const msg = panne 
-        ? `Panne signalée — Temp: ${temperature}°C, Vib: ${vibration}g` 
-        : `Anomalie — Temp: ${temperature}°C, Vib: ${vibration}g`;
-
+    // Vérifier les anomalies
+    if (panne) {
       db.prepare(`
-        INSERT INTO alertes (organisation_id,equipement_id,type,severite,message,source) 
-        VALUES (?,?,?,?,?,?)
-      `).run(organisation_id, equipement_id, panne ? "PANNE" : "ANOMALIE_IOT", severite, msg, "IOT");
+        INSERT INTO alertes (organisation_id, equipement_id, type, severite, message, source) 
+        VALUES (?, ?, 'PANNE', 'CRITIQUE', 'Panne signalée par capteur', 'IOT')
+      `).run(organisation_id, equipement_id);
 
       db.prepare(`
         UPDATE equipements 
-        SET scoreRisque=MIN(100,scoreRisque+?), statut=CASE WHEN ?=1 THEN 'En panne' ELSE statut END 
-        WHERE id=? AND organisation_id=?
-      `).run(panne ? 15 : 5, panne ? 1 : 0, equipement_id, organisation_id);
+        SET scoreRisque = MIN(100, scoreRisque + 15), statut = 'En panne'
+        WHERE id = ? AND organisation_id = ?
+      `).run(equipement_id, organisation_id);
     }
 
     res.json({ message: "Données IoT reçues", timestamp: new Date() });
@@ -332,9 +374,116 @@ app.post("/api/capteurs", (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════
+// CONFIGURATION CAPTEURS (SANS middleware)
+// ════════════════════════════════════════════════════════════
+
+// Récupérer la configuration des capteurs d'un équipement
+app.get("/api/capteurs/config/:equipementId", authMiddleware, (req, res) => {
+  try {
+    const config = db.prepare(`
+      SELECT * FROM equipement_capteurs 
+      WHERE equipement_id = ? AND organisation_id = ?
+    `).get(req.params.equipementId, req.user.organisation_id);
+    
+    if (!config) {
+      // Retourner une config par défaut
+      return res.json({
+        equipement_id: parseInt(req.params.equipementId),
+        organisation_id: req.user.organisation_id,
+        param1_nom: 'Température',
+        param1_unite: '°C',
+        param2_nom: 'Vibration',
+        param2_unite: 'g',
+        param3_nom: 'Paramètre 3',
+        param3_unite: '',
+        param4_nom: 'Paramètre 4',
+        param4_unite: '',
+        param5_nom: 'Paramètre 5',
+        param5_unite: '',
+        param6_nom: 'Paramètre 6',
+        param6_unite: '',
+        param7_nom: 'Paramètre 7',
+        param7_unite: '',
+        param8_nom: 'Paramètre 8',
+        param8_unite: '',
+        nb_capteurs_actifs: 2
+      });
+    }
+    
+    res.json(config);
+  } catch (err) {
+    res.status(500).json({ erreur: err.message });
+  }
+});
+
+// Sauvegarder la configuration des capteurs
+app.post("/api/capteurs/config", authMiddleware, (req, res) => {
+  const { 
+    equipement_id, 
+    nb_capteurs_actifs,
+    param1_nom, param1_unite,
+    param2_nom, param2_unite,
+    param3_nom, param3_unite,
+    param4_nom, param4_unite,
+    param5_nom, param5_unite,
+    param6_nom, param6_unite,
+    param7_nom, param7_unite,
+    param8_nom, param8_unite
+  } = req.body;
+  
+  try {
+    const result = db.prepare(`
+      INSERT INTO equipement_capteurs (
+        equipement_id, organisation_id, nb_capteurs_actifs,
+        param1_nom, param1_unite,
+        param2_nom, param2_unite,
+        param3_nom, param3_unite,
+        param4_nom, param4_unite,
+        param5_nom, param5_unite,
+        param6_nom, param6_unite,
+        param7_nom, param7_unite,
+        param8_nom, param8_unite
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(equipement_id) DO UPDATE SET
+        nb_capteurs_actifs = excluded.nb_capteurs_actifs,
+        param1_nom = excluded.param1_nom,
+        param1_unite = excluded.param1_unite,
+        param2_nom = excluded.param2_nom,
+        param2_unite = excluded.param2_unite,
+        param3_nom = excluded.param3_nom,
+        param3_unite = excluded.param3_unite,
+        param4_nom = excluded.param4_nom,
+        param4_unite = excluded.param4_unite,
+        param5_nom = excluded.param5_nom,
+        param5_unite = excluded.param5_unite,
+        param6_nom = excluded.param6_nom,
+        param6_unite = excluded.param6_unite,
+        param7_nom = excluded.param7_nom,
+        param7_unite = excluded.param7_unite,
+        param8_nom = excluded.param8_nom,
+        param8_unite = excluded.param8_unite
+    `).run(
+      equipement_id, req.user.organisation_id, nb_capteurs_actifs,
+      param1_nom, param1_unite,
+      param2_nom, param2_unite,
+      param3_nom, param3_unite,
+      param4_nom, param4_unite,
+      param5_nom, param5_unite,
+      param6_nom, param6_unite,
+      param7_nom, param7_unite,
+      param8_nom, param8_unite
+    );
+    
+    res.json({ message: "Configuration sauvegardée", id: result.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ erreur: err.message });
+  }
+});
 // ════════════════════════════════════════════════════════════
 // MIDDLEWARE GLOBAL
 // ════════════════════════════════════════════════════════════
+
 app.use("/api", authMiddleware);
 
 // ─── ÉQUIPEMENTS ────────────────────────────────────────────
@@ -428,8 +577,8 @@ app.patch("/api/alertes/:id/lire", (req, res) => {
   }
 });
 
-// ─── CAPTEURS IOT ───────────────────────────────────────────
-app.get("/api/capteurs/:equipementId", (req, res) => {
+// ─── CAPTEURS IOT (version dynamique) ───────────────────────
+app.get("/api/capteurs/:equipementId", authMiddleware, (req, res) => {
   try {
     const rows = db.prepare("SELECT * FROM iot_data WHERE equipement_id=? AND organisation_id=? ORDER BY id DESC LIMIT 30")
       .all(req.params.equipementId, req.user.organisation_id);

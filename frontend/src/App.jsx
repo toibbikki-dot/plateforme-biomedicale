@@ -671,91 +671,334 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
   </div>
 ));
 
-const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitoring,changerEquipMonitoring})=>{
-  const dernier=iotData.length>0?iotData[iotData.length-1]:null;
-  const chartData=iotData.slice(-15).map((d,i)=>({i,temperature:parseFloat(d.temperature)||0,vibration:parseFloat(d.vibration)||0}));
-  return(
+const IoT = memo(({equipements, iotData, iotEquipId, monitoringActif, toggleMonitoring, changerEquipMonitoring, token}) => {
+  const [capteursConfig, setCapteursConfig] = useState(null);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [configForm, setConfigForm] = useState({
+    nb_capteurs_actifs: 2,
+    param1_nom: 'Température',
+    param1_unite: '°C',
+    param2_nom: 'Vibration',
+    param2_unite: 'g',
+    param3_nom: 'Paramètre 3',
+    param3_unite: '',
+    param4_nom: 'Paramètre 4',
+    param4_unite: '',
+    param5_nom: 'Paramètre 5',
+    param5_unite: '',
+    param6_nom: 'Paramètre 6',
+    param6_unite: '',
+    param7_nom: 'Paramètre 7',
+    param7_unite: '',
+    param8_nom: 'Paramètre 8',
+    param8_unite: '',
+  });
+
+  const dernier = iotData.length > 0 ? iotData[iotData.length - 1] : null;
+
+  // Charger la configuration au changement d'équipement
+  useEffect(() => {
+    async function chargerConfig() {
+      if (!iotEquipId || !token) return;
+      try {
+        const r = await fetch(`${API}/capteurs/config/${iotEquipId}`, {
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
+        });
+        if (r.ok) {
+          const config = await r.json();
+          setCapteursConfig(config);
+          setConfigForm(config);
+          
+          // Si pas de config existante (nb_capteurs_actifs = 0), afficher le modal
+          if (!config.id || config.nb_capteurs_actifs === 0) {
+            setShowConfigModal(true);
+          }
+        }
+      } catch (err) {
+        console.error("Erreur chargement config:", err);
+      }
+    }
+    
+    if (iotEquipId && monitoringActif) {
+      chargerConfig();
+    }
+  }, [iotEquipId, monitoringActif, token]);
+
+  // Sauvegarder la configuration
+  async function sauvegarderConfig() {
+    if (!token) return;
+    try {
+      const r = await fetch(`${API}/capteurs/config`, {
+        method: 'POST',
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          equipement_id: iotEquipId,
+          ...configForm
+        })
+      });
+      
+      if (r.ok) {
+        const config = await r.json();
+        setCapteursConfig(config);
+        setShowConfigModal(false);
+        alert("✅ Configuration sauvegardée");
+      }
+    } catch (err) {
+      alert("❌ Erreur sauvegarde configuration");
+    }
+  }
+
+  // Données pour les graphiques
+  const chartData = iotData.slice(-15).map((d, i) => {
+    const point = { i };
+    for (let idx = 1; idx <= 8; idx++) {
+      point[`param${idx}`] = parseFloat(d[`param${idx}`]) || 0;
+    }
+    return point;
+  });
+
+  return (
     <div>
-      <div style={{...S.card,display:"flex",alignItems:"center",gap:20,flexWrap:"wrap"}}>
-        <div style={{flex:1}}>
+      {/* Configuration initiale */}
+      {showConfigModal && (
+        <div style={S.overlay}>
+          <div style={{...S.modal, maxWidth: 600, maxHeight: '90vh', overflowY: 'auto'}}>
+            <h3 style={{marginBottom: 20, color: "white"}}>⚙️ Configurer les capteurs</h3>
+            <p style={{color: "#94A3B8", marginBottom: 24}}>
+              Définissez les paramètres à surveiller pour cet équipement
+            </p>
+            
+            <div style={{marginBottom: 20}}>
+              <label style={S.lbl}>Nombre de capteurs actifs (2-8)</label>
+              <input 
+                type="number" 
+                min="2" 
+                max="8" 
+                value={configForm.nb_capteurs_actifs}
+                onChange={(e) => setConfigForm(p => ({...p, nb_capteurs_actifs: parseInt(e.target.value) || 2}))}
+                style={S.inp}
+              />
+            </div>
+            
+            {/* Paramètre 1 */}
+            <div style={{...S.fgrid, marginBottom: 12}}>
+              <div>
+                <label style={S.lbl}>Capteur 1 - Nom</label>
+                <input 
+                  style={S.inp} 
+                  value={configForm.param1_nom}
+                  onChange={(e) => setConfigForm(p => ({...p, param1_nom: e.target.value}))}
+                  placeholder="Ex: Température"
+                />
+              </div>
+              <div>
+                <label style={S.lbl}>Unité</label>
+                <input 
+                  style={S.inp} 
+                  value={configForm.param1_unite}
+                  onChange={(e) => setConfigForm(p => ({...p, param1_unite: e.target.value}))}
+                  placeholder="Ex: °C"
+                />
+              </div>
+            </div>
+            
+            {/* Paramètre 2 */}
+            <div style={{...S.fgrid, marginBottom: 12}}>
+              <div>
+                <label style={S.lbl}>Capteur 2 - Nom</label>
+                <input 
+                  style={S.inp} 
+                  value={configForm.param2_nom}
+                  onChange={(e) => setConfigForm(p => ({...p, param2_nom: e.target.value}))}
+                  placeholder="Ex: Vibration"
+                />
+              </div>
+              <div>
+                <label style={S.lbl}>Unité</label>
+                <input 
+                  style={S.inp} 
+                  value={configForm.param2_unite}
+                  onChange={(e) => setConfigForm(p => ({...p, param2_unite: e.target.value}))}
+                  placeholder="Ex: g"
+                />
+              </div>
+            </div>
+            
+            {/* Paramètres 3 à 8 (dynamiques) */}
+            {configForm.nb_capteurs_actifs > 2 && [...Array(configForm.nb_capteurs_actifs - 2)].map((_, i) => {
+              const idx = i + 3;
+              return (
+                <div key={idx} style={{...S.fgrid, marginBottom: 12}}>
+                  <div>
+                    <label style={S.lbl}>Capteur {idx} - Nom</label>
+                    <input 
+                      style={S.inp} 
+                      value={configForm[`param${idx}_nom`]}
+                      onChange={(e) => setConfigForm(p => ({...p, [`param${idx}_nom`]: e.target.value}))}
+                      placeholder={`Paramètre ${idx}`}
+                    />
+                  </div>
+                  <div>
+                    <label style={S.lbl}>Unité</label>
+                    <input 
+                      style={S.inp} 
+                      value={configForm[`param${idx}_unite`]}
+                      onChange={(e) => setConfigForm(p => ({...p, [`param${idx}_unite`]: e.target.value}))}
+                      placeholder="Unité"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+            
+            <div style={{display: 'flex', gap: 12, marginTop: 24}}>
+              <button 
+                onClick={sauvegarderConfig}
+                style={{...S.btnSolid("#00D4AA"), flex: 1}}
+              >
+                ✅ Sauvegarder la configuration
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interface principale */}
+      <div style={{...S.card, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap"}}>
+        <div style={{flex: 1}}>
           <label style={S.lbl}>Équipement à surveiller</label>
-          <select style={{...S.sel,maxWidth:320}} value={iotEquipId} onChange={e=>changerEquipMonitoring(parseInt(e.target.value))}>
-            {equipements.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}
+          <select style={{...S.sel, maxWidth: 320}} value={iotEquipId} onChange={e => changerEquipMonitoring(parseInt(e.target.value))}>
+            {equipements.map(e => <option key={e.id} value={e.id}>{e.nom}</option>)}
           </select>
         </div>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-          <div style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:"0.1em"}}>Monitoring</div>
-          <button onClick={toggleMonitoring} style={{padding:"10px 28px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:14,background:monitoringActif?"#00D4AA":"rgba(255,255,255,0.08)",color:monitoringActif?"#020B18":"#64748B",boxShadow:monitoringActif?"0 0 20px rgba(0,212,170,0.4)":"none"}}>
-            {monitoringActif?"⏹️ Arrêter":"▶️ Démarrer"}
+        <div style={{display: "flex", flexDirection: "column", alignItems: "center", gap: 8}}>
+          <div style={{fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.1em"}}>Monitoring</div>
+          <button onClick={toggleMonitoring} style={{padding: "10px 28px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14, background: monitoringActif ? "#00D4AA" : "rgba(255,255,255,0.08)", color: monitoringActif ? "#020B18" : "#64748B", boxShadow: monitoringActif ? "0 0 20px rgba(0,212,170,0.4)" : "none"}}>
+            {monitoringActif ? "⏹️ Arrêter" : "▶️ Démarrer"}
           </button>
-          <div style={{fontSize:11,color:monitoringActif?"#00D4AA":"#334155",fontWeight:600}}>{monitoringActif?"● EN COURS":"○ INACTIF"}</div>
+          <div style={{fontSize: 11, color: monitoringActif ? "#00D4AA" : "#334155", fontWeight: 600}}>
+            {monitoringActif ? "● EN COURS" : "○ INACTIF"}
+          </div>
         </div>
       </div>
-      {monitoringActif?(
+
+      {monitoringActif ? (
         <>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:16,marginBottom:24}}>
-            {[
-              {icon:"🌡️",val:dernier?parseFloat(dernier.temperature).toFixed(1)+"°C":"--",lbl:"Température",c:"#FF4D6D",alerte:dernier&&parseFloat(dernier.temperature)>50},
-              {icon:"📳",val:dernier?parseFloat(dernier.vibration).toFixed(2)+" g":"--",lbl:"Vibration",c:"#A78BFA",alerte:dernier&&parseFloat(dernier.vibration)>0.7},
-              {icon:dernier?.actif?"⚡":"💤",val:dernier?.actif?"Actif":"Inactif",lbl:"État",c:dernier?.actif?"#00D4AA":"#475569",alerte:false},
-              {icon:dernier?.anomalie?"🚨":"✅",val:dernier?.anomalie?"ALERTE":"Normal",lbl:"Statut",c:dernier?.anomalie?"#FF4D6D":"#00D4AA",alerte:false},
-            ].map((k,i)=>(
-              <div key={i} style={{background:`${k.c}08`,border:`1px solid ${k.c}20`,borderRadius:12,padding:20,textAlign:"center"}}>
-                <div style={{fontSize:32}}>{k.icon}</div>
-                <div style={{fontSize:28,fontWeight:900,color:k.c,marginTop:4}}>{k.val}</div>
-                <div style={{fontSize:12,color:"#475569",marginTop:4}}>{k.lbl}</div>
-                {k.alerte&&<div style={{color:"#FF4D6D",fontSize:11,fontWeight:700,marginTop:4}}>⚠️ ANOMALIE</div>}
+          {/* Cartes de données dynamiques */}
+          <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16, marginBottom: 24}}>
+            {/* État */}
+            <div style={{background: "rgba(0,212,170,0.08)", border: "1px solid rgba(0,212,170,0.2)", borderRadius: 12, padding: 20, textAlign: "center"}}>
+              <div style={{fontSize: 32}}>{dernier?.etat ? "⚡" : "💤"}</div>
+              <div style={{fontSize: 28, fontWeight: 900, color: dernier?.etat ? "#00D4AA" : "#475569", marginTop: 4}}>
+                {dernier?.etat ? "Actif" : "Inactif"}
               </div>
-            ))}
+              <div style={{fontSize: 12, color: "#475569", marginTop: 4}}>État</div>
+            </div>
+            
+            {/* Panne */}
+            <div style={{background: "rgba(255,77,109,0.08)", border: "1px solid rgba(255,77,109,0.2)", borderRadius: 12, padding: 20, textAlign: "center"}}>
+              <div style={{fontSize: 32}}>{dernier?.panne ? "" : "✅"}</div>
+              <div style={{fontSize: 28, fontWeight: 900, color: dernier?.panne ? "#FF4D6D" : "#00D4AA", marginTop: 4}}>
+                {dernier?.panne ? "OUI" : "NON"}
+              </div>
+              <div style={{fontSize: 12, color: "#475569", marginTop: 4}}>Panne</div>
+            </div>
+            
+            {/* Paramètres configurables */}
+            {capteursConfig && [...Array(capteursConfig.nb_capteurs_actifs)].map((_, i) => {
+              const idx = i + 1;
+              const nom = capteursConfig[`param${idx}_nom`];
+              const unite = capteursConfig[`param${idx}_unite`];
+              const valeur = dernier ? dernier[`param${idx}`] : null;
+              
+              return (
+                <div key={idx} style={{background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: 20, textAlign: "center"}}>
+                  <div style={{fontSize: 32}}>📊</div>
+                  <div style={{fontSize: 28, fontWeight: 900, color: "white", marginTop: 4}}>
+                    {valeur !== null ? `${parseFloat(valeur).toFixed(2)}` : "--"}
+                  </div>
+                  <div style={{fontSize: 12, color: "#475569", marginTop: 4}}>
+                    {nom} {unite && `(${unite})`}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          {chartData.length>0&&(
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
-              <div style={S.card}>
-                <div style={S.cardTitle}>🌡️ Évolution température</div>
-                <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={chartData}>
-                    <XAxis dataKey="i" hide/><YAxis domain={[0,100]} tick={{fill:"#64748B"}}/>
-                    <Tooltip contentStyle={{background:"#041225",border:"1px solid rgba(255,77,109,0.3)",borderRadius:8,color:"white"}} formatter={v=>`${v}°C`}/>
-                    <Line type="monotone" dataKey="temperature" stroke="#FF4D6D" strokeWidth={2} dot={false}/>
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={S.card}>
-                <div style={S.cardTitle}>📳 Évolution vibration</div>
-                <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={chartData}>
-                    <XAxis dataKey="i" hide/><YAxis domain={[0,2]} tick={{fill:"#64748B"}}/>
-                    <Tooltip contentStyle={{background:"#041225",border:"1px solid rgba(167,139,250,0.3)",borderRadius:8,color:"white"}} formatter={v=>`${v} g`}/>
-                    <Line type="monotone" dataKey="vibration" stroke="#A78BFA" strokeWidth={2} dot={false}/>
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+
+          {/* Graphiques dynamiques */}
+          {chartData.length > 0 && capteursConfig && (
+            <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: 24}}>
+              {[...Array(capteursConfig.nb_capteurs_actifs)].map((_, i) => {
+                const idx = i + 1;
+                const nom = capteursConfig[`param${idx}_nom`];
+                const unite = capteursConfig[`param${idx}_unite`];
+                const couleur = COULEURS[i % COULEURS.length];
+                
+                return (
+                  <div key={idx} style={S.card}>
+                    <div style={S.cardTitle}>📈 Évolution {nom} {unite && `(${unite})`}</div>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={chartData}>
+                        <XAxis dataKey="i" hide />
+                        <YAxis tick={{fill: "#64748B"}} />
+                        <Tooltip contentStyle={{background: "#041225", border: `1px solid ${couleur}30`, borderRadius: 8, color: "white"}} formatter={v => `${v} ${unite}`} />
+                        <Line type="monotone" dataKey={`param${idx}`} stroke={couleur} strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                );
+              })}
             </div>
           )}
         </>
-      ):(
-        <div style={{...S.card,padding:48,textAlign:"center"}}>
-          <div style={{fontSize:48,marginBottom:16}}>📡</div>
-          <div style={{fontSize:18,fontWeight:700,color:"white",marginBottom:8}}>Monitoring désactivé</div>
-          <div style={{fontSize:14,color:"#475569",marginBottom:24}}>Appuyez sur "▶️ Démarrer" pour surveiller en temps réel.</div>
-          <button onClick={toggleMonitoring} style={{...S.btnSolid("#00D4AA"),fontSize:15,padding:"12px 32px"}}>▶️ Démarrer le monitoring</button>
+      ) : (
+        <div style={{...S.card, padding: 48, textAlign: "center"}}>
+          <div style={{fontSize: 48, marginBottom: 16}}>📡</div>
+          <div style={{fontSize: 18, fontWeight: 700, color: "white", marginBottom: 8}}>Monitoring désactivé</div>
+          <div style={{fontSize: 14, color: "#475569", marginBottom: 24}}>Appuyez sur "▶️ Démarrer" pour surveiller en temps réel.</div>
+          <button onClick={toggleMonitoring} style={{...S.btnSolid("#00D4AA"), fontSize: 15, padding: "12px 32px"}}>▶️ Démarrer le monitoring</button>
         </div>
       )}
-      <div style={{...S.card,marginTop:24}}>
+
+      {/* Historique */}
+      <div style={{...S.card, marginTop: 24}}>
         <div style={S.cardTitle}>📋 Historique des mesures ({iotData.length} entrées)</div>
-        {iotData.length===0?(
-          <div style={{textAlign:"center",padding:32,color:"#334155"}}><div style={{fontSize:32,marginBottom:8}}>📂</div><div>Aucune donnée disponible</div></div>
-        ):(
+        {iotData.length === 0 ? (
+          <div style={{textAlign: "center", padding: 32, color: "#334155"}}>
+            <div style={{fontSize: 32, marginBottom: 8}}>📂</div>
+            <div>Aucune donnée disponible</div>
+          </div>
+        ) : (
           <table style={S.tbl}>
-            <thead><tr>{["Date & Heure","Température","Vibration","État","Anomalie"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <thead>
+              <tr>
+                <th style={S.th}>Date & Heure</th>
+                {capteursConfig && [...Array(capteursConfig.nb_capteurs_actifs)].map((_, i) => {
+                  const idx = i + 1;
+                  const nom = capteursConfig[`param${idx}_nom`];
+                  const unite = capteursConfig[`param${idx}_unite`];
+                  return <th key={idx} style={S.th}>{nom} {unite && `(${unite})`}</th>;
+                })}
+                <th style={S.th}>État</th>
+                <th style={S.th}>Panne</th>
+              </tr>
+            </thead>
             <tbody>
-              {[...iotData].reverse().slice(0,15).map((d,i)=>(
+              {[...iotData].reverse().slice(0, 15).map((d, i) => (
                 <tr key={i}>
-                  <td style={{...S.td,fontSize:12,color:"#475569"}}>{formaterDate(d.timestamp)}</td>
-                  <td style={S.td}><span style={{color:parseFloat(d.temperature)>50?"#FF4D6D":"#00D4AA",fontWeight:700}}>{parseFloat(d.temperature).toFixed(1)}°C</span></td>
-                  <td style={S.td}><span style={{color:parseFloat(d.vibration)>0.7?"#FF4D6D":"#00D4AA",fontWeight:700}}>{parseFloat(d.vibration).toFixed(2)} g</span></td>
-                  <td style={S.td}>{d.panne?"🔴 En panne":d.actif==1?"⚡ En service":"💤 À l'arrêt"}</td>
-                  <td style={S.td}><span style={badge(d.anomalie?"HAUTE":"BASSE")}>{d.anomalie?"⚠️ Oui":"✅ Non"}</span></td>
+                  <td style={{...S.td, fontSize: 12, color: "#475569"}}>{formaterDate(d.timestamp)}</td>
+                  {capteursConfig && [...Array(capteursConfig.nb_capteurs_actifs)].map((_, j) => {
+                    const idx = j + 1;
+                    return (
+                      <td key={idx} style={S.td}>
+                        <span style={{color: "white", fontWeight: 700}}>
+                          {d[`param${idx}`] !== null ? parseFloat(d[`param${idx}`]).toFixed(2) : "--"}
+                        </span>
+                      </td>
+                    );
+                  })}
+                  <td style={S.td}>{d.etat == 1 ? "⚡ Actif" : "💤 Inactif"}</td>
+                  <td style={S.td}>{d.panne ? "🔴 Oui" : "✅ Non"}</td>
                 </tr>
               ))}
             </tbody>
@@ -1118,7 +1361,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout}){
         {onglet==="equipements"&&<Equipements equipements={equipements} peutModifier={peutModifier} supprimerEquipement={supprimerEquipement} changerEquipMonitoring={changerEquipMonitoring} setOnglet={setOnglet} token={token}/>}
         {onglet==="maintenances"&&<Maintenances maintenances={maintenances} equipements={equipements} ajouterMaintenance={ajouterMaintenance}/>}
         {onglet==="calendrier"&&<Calendrier maintenances={maintenances}/>}
-        {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring}/>}
+        {onglet === "iot" && <IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring} token={token} />}
         {onglet==="ia"&&<ModuleIA equipements={equipements} token={token} setOnglet={setOnglet}/>}
         {onglet==="alertes"&&<Alertes alertes={alertes} equipements={equipements} lireAlerte={lireAlerte} setOnglet={setOnglet}/>}
         {onglet==="utilisateurs"&&estAdmin&&estModeOrganisation&&<Utilisateurs utilisateurs={utilisateurs} currentUserId={user.id} desactiverUtilisateur={desactiverUtilisateur} reactiverUtilisateur={reactiverUtilisateur} ajouterUtilisateur={ajouterUtilisateur} organisation={organisation}/>}
