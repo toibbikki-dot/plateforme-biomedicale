@@ -4,7 +4,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
  
 const API    = "https://plateforme-biomedicale-production.up.railway.app/api";
-const API_IA = "http://localhost:5001/ia";
+const API_IA = "http://plateforme-biomedicale.railway.internal";
 const COULEURS = ["#00D4AA","#F59E0B","#FF4D6D","#7C3AED","#3B82F6","#EC4899"];
 
 function badge(statut) {
