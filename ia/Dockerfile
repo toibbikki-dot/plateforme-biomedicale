@@ -1,12 +1,12 @@
-# rebuild-cache-bust-2026-06-30
+# rebuild-2026-06-30
 FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY ia/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY ia/ .
 
 EXPOSE 5001
 
