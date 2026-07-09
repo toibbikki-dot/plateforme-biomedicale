@@ -4,10 +4,10 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
-COPY backend/package*.json ./
+COPY package*.json ./
 RUN npm install --production
 
-COPY backend/ ./
+COPY . ./
 
 EXPOSE 3001
 
