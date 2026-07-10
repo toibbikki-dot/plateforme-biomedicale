@@ -23,9 +23,10 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-const db = new Database(path.join(__dirname, "biomedical.db"));
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, "biomedical.db");
+const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
-console.log("✅ Base de données connectée");
+console.log(`✅ Base de données connectée (${DB_PATH})`);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS organisations (
