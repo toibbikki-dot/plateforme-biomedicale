@@ -423,7 +423,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
           <div style={{width:12, height:12, borderRadius:"50%", background:"#00D4AA", boxShadow:"0 0 8px #00D4AA"}}/>
           <div>
             <div style={{fontWeight:700, color:"white", fontSize:15}}>🤖 Serveur IA connecté</div>
-            <div style={{fontSize:12, color:"#475569"}}>http://localhost:5001 — Modèle : {statsIA ? "Actif" : "En attente"}</div>
+            <div style={{fontSize:12, color:"#475569"}}>{API_IA} — Modèle : {statsIA ? "Actif" : "En attente"}</div>
           </div>
         </div>
         <div style={{display:"flex", gap:12, flexWrap:"wrap"}}>
