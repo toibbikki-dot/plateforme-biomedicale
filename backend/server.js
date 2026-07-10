@@ -351,7 +351,18 @@ app.post("/api/equipements", (req, res) => {
 });
 
 app.delete("/api/equipements/:id", (req, res) => {
-  try { res.json({ supprime: db.prepare("DELETE FROM equipements WHERE id=? AND organisation_id=?").run(req.params.id, req.user.organisation_id).changes > 0 }); }
+  try {
+    const id = req.params.id;
+    const orgId = req.user.organisation_id;
+    const supprimerEnCascade = db.transaction(() => {
+      db.prepare("DELETE FROM maintenances WHERE equipementId=? AND organisation_id=?").run(id, orgId);
+      db.prepare("DELETE FROM alertes WHERE equipement_id=? AND organisation_id=?").run(id, orgId);
+      db.prepare("DELETE FROM iot_data WHERE equipement_id=?").run(id);
+      db.prepare("DELETE FROM equipement_capteurs WHERE equipement_id=?").run(id);
+      return db.prepare("DELETE FROM equipements WHERE id=? AND organisation_id=?").run(id, orgId).changes > 0;
+    });
+    res.json({ supprime: supprimerEnCascade() });
+  }
   catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
