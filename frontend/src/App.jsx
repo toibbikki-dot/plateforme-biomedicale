@@ -926,7 +926,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
   );
 });
 
-const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerEquipMonitoring,setOnglet,token})=>{
+const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerEquipMonitoring,setOnglet,token,charger})=>{
   const [recherche,setRecherche]=useState("");
   const [filtreStatut,setFiltreStatut]=useState("Tous");
   const [showForm,setShowForm]=useState(false);
@@ -942,7 +942,7 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
     try{
       await fetch(`${API}/equipements`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify(form)});
       setShowForm(false);setForm({nom:"",marque:"",numeroSerie:"",service:"",statut:"En service",dateAcquisition:"",prochaineMaintenance:""});
-      window.location.reload();
+      await charger();
     }catch{}
   }
 
@@ -1275,7 +1275,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout}){
         <div style={S.title}>{titres[onglet]?.title}</div>
         <div style={S.sub}>{titres[onglet]?.sub}</div>
         {onglet==="dashboard"&&<Dashboard equipements={equipements} maintenances={maintenances} pieStatuts={pieStatuts} barServices={barServices} pieMaint={pieMaint} total={total} serv={serv} maint={maint} panne={panne} dispo={dispo} crit={crit} exportPDF={exportPDF} setOnglet={setOnglet}/>}
-        {onglet==="equipements"&&<Equipements equipements={equipements} peutModifier={peutModifier} supprimerEquipement={supprimerEquipement} changerEquipMonitoring={changerEquipMonitoring} setOnglet={setOnglet} token={token}/>}
+        {onglet==="equipements"&&<Equipements equipements={equipements} peutModifier={peutModifier} supprimerEquipement={supprimerEquipement} changerEquipMonitoring={changerEquipMonitoring} setOnglet={setOnglet} token={token} charger={charger}/>}
         {onglet==="maintenances"&&<Maintenances maintenances={maintenances} equipements={equipements} ajouterMaintenance={ajouterMaintenance}/>}
         {onglet==="calendrier"&&<Calendrier maintenances={maintenances}/>}
         {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring} token={token}/>}
