@@ -596,6 +596,32 @@ app.post("/api/equipements", requireIngenieur, (req, res) => {
   } catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
+// Modifier un équipement (admin / ingénieur). La clé d'appareil et le score
+// de risque ne sont pas modifiables ici : le score est recalculé automatiquement.
+const texteNonVide = v => typeof v === "string" && v.trim() !== "";
+app.put("/api/equipements/:id", requireIngenieur, (req, res) => {
+  const { nom, marque, numeroSerie, service, statut, dateAcquisition, prochaineMaintenance } = req.body;
+  if (!texteNonVide(nom) || !texteNonVide(numeroSerie)) return res.status(400).json({ erreur: "Le nom et le numéro de série sont obligatoires" });
+  const STATUTS = ["En service", "En maintenance", "En panne"];
+  if (statut && !STATUTS.includes(statut)) return res.status(400).json({ erreur: "Statut invalide" });
+  const dateOk = d => !d || /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (!dateOk(dateAcquisition) || !dateOk(prochaineMaintenance)) return res.status(400).json({ erreur: "Format de date invalide" });
+  if (dateAcquisition && new Date(dateAcquisition) > new Date()) return res.status(400).json({ erreur: "La date d'acquisition ne peut pas être dans le futur" });
+  try {
+    const id = req.params.id, orgId = req.user.organisation_id;
+    const modifier = db.transaction(() => {
+      const ok = db.prepare("UPDATE equipements SET nom=?, marque=?, numeroSerie=?, service=?, statut=?, dateAcquisition=?, prochaineMaintenance=? WHERE id=? AND organisation_id=?")
+        .run(nom.trim(), marque || "", numeroSerie.trim(), service || "", statut || "En service", dateAcquisition || null, prochaineMaintenance || null, id, orgId).changes > 0;
+      // Le nom est recopié dans les maintenances : on le garde à jour
+      if (ok) db.prepare("UPDATE maintenances SET equipementNom=? WHERE equipementId=? AND organisation_id=?").run(nom.trim(), id, orgId);
+      return ok;
+    });
+    if (!modifier()) return res.status(404).json({ erreur: "Équipement introuvable dans votre organisation" });
+    recalculerScore(Number(id));
+    res.json(sansCle(db.prepare("SELECT * FROM equipements WHERE id=?").get(id)));
+  } catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
 // Clé d'appareil : consulter (la génère si elle manque)
 app.get("/api/equipements/:id/cle", requireIngenieur, (req, res) => {
   try {

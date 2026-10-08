@@ -583,6 +583,10 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
         <div style={S.card}>
           <div style={S.cardTitle}>🔍 Analyser un équipement</div>
           <SelecteurTri tris={TRIS_EQUIPEMENT} valeur={triIA} onChange={setTriIA} style={{maxWidth:"100%",marginBottom:12}}/>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.06em",padding:"0 14px",marginBottom:6}}>
+            <span>Équipement</span>
+            <span title="Calculé par règles : panne en cours, pannes signalées, anomalies et maintenances correctives récentes">Score de risque (règles) ⓘ</span>
+          </div>
           <div style={{display:"flex", flexDirection:"column", gap:8}}>
             {trierListe(equipements,TRIS_EQUIPEMENT,triIA).map(e => (
               <div key={e.id} onClick={() => analyserEquipement(e.id)}
@@ -629,11 +633,18 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
                 }}>
                   <div style={{width:110, height:110, borderRadius:"50%", background:"var(--panel-bg)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center"}}>
                     <div style={{fontSize:28, fontWeight:900, color:predictionDetail.couleur}}>{predictionDetail.pourcentage}%</div>
-                    <div style={{fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em"}}>Risque panne</div>
+                    <div style={{fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em"}}>Probabilité IA</div>
                   </div>
                 </div>
                 <div style={{marginTop:12}}>
                   <span style={badge(predictionDetail.niveau_risque)}>{predictionDetail.niveau_risque}</span>
+                </div>
+                <div style={{fontSize:11,color:"var(--muted)",marginTop:10,lineHeight:1.5,maxWidth:340,marginLeft:"auto",marginRight:"auto"}}>
+                  {predictionDetail.source_modele==="random_forest"
+                    ? "Probabilité, estimée par le modèle RandomForest, que cet équipement appartienne au groupe « à risque », en le comparant aux autres équipements de l'organisation."
+                    : "Estimation par méthode heuristique (le modèle n'est pas encore entraîné)."}
+                  {" "}Elle diffère du score de risque de la liste, qui est calculé par règles fixes.
+                  {typeof predictionDetail.equipement_id!=="undefined"&&(()=>{const eq=equipements.find(x=>x.id===predictionDetail.equipement_id);return eq?<div style={{marginTop:4}}>Score de risque (règles) : <b style={{color:riskColor(eq.scoreRisque)}}>{eq.scoreRisque}%</b></div>:null;})()}
                 </div>
               </div>
 
@@ -1172,7 +1183,18 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
   const [recherche,setRecherche]=useState("");
   const [filtreStatut,setFiltreStatut]=useState("Tous");
   const [showForm,setShowForm]=useState(false);
-  const [form,setForm]=useState({nom:"",marque:"",numeroSerie:"",service:"",statut:"En service",dateAcquisition:"",prochaineMaintenance:""});
+  const FORM_VIDE={nom:"",marque:"",numeroSerie:"",service:"",statut:"En service",dateAcquisition:"",prochaineMaintenance:""};
+  const [form,setForm]=useState(FORM_VIDE);
+  const [enEdition,setEnEdition]=useState(null); // id de l'équipement modifié, ou null pour un ajout
+  const [erreurForm,setErreurForm]=useState("");
+  const [envoi,setEnvoi]=useState(false);
+  function ouvrirAjout(){setEnEdition(null);setForm(FORM_VIDE);setErreurForm("");setShowForm(true);}
+  function ouvrirModification(e){
+    setEnEdition(e.id);setErreurForm("");
+    setForm({nom:e.nom||"",marque:e.marque||"",numeroSerie:e.numeroSerie||"",service:e.service||"",statut:e.statut||"En service",dateAcquisition:e.dateAcquisition||"",prochaineMaintenance:e.prochaineMaintenance||""});
+    setShowForm(true);
+  }
+  function fermerForm(){setShowForm(false);setEnEdition(null);setForm(FORM_VIDE);setErreurForm("");}
 
   const filtres=equipements.filter(e=>{
     const r=recherche.toLowerCase();
@@ -1182,12 +1204,16 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
   const listeTriee=trierListe(filtres,TRIS_EQUIPEMENT,triEq);
 
   async function sauvegarder(){
-    if(!form.nom||!form.numeroSerie) return;
+    if(!form.nom.trim()||!form.numeroSerie.trim()){setErreurForm("Le nom et le numéro de série sont obligatoires.");return;}
+    setEnvoi(true);setErreurForm("");
     try{
-      await fetch(`${API}/equipements`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify(form)});
-      setShowForm(false);setForm({nom:"",marque:"",numeroSerie:"",service:"",statut:"En service",dateAcquisition:"",prochaineMaintenance:""});
+      const url=enEdition?`${API}/equipements/${enEdition}`:`${API}/equipements`;
+      const r=await fetch(url,{method:enEdition?"PUT":"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify(form)});
+      if(!r.ok){const d=await r.json().catch(()=>({}));setErreurForm(d.erreur||`Erreur ${r.status}`);return;}
+      fermerForm();
       await charger();
-    }catch{}
+    }catch{setErreurForm("Serveur inaccessible.");}
+    finally{setEnvoi(false);}
   }
 
   return(
@@ -1198,7 +1224,7 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
           {["Tous","En service","En maintenance","En panne"].map(s=><option key={s}>{s}</option>)}
         </select>
         <SelecteurTri tris={TRIS_EQUIPEMENT} valeur={triEq} onChange={setTriEq}/>
-        {peutModifier&&<button style={S.btn()} onClick={()=>setShowForm(true)}>+ Ajouter</button>}
+        {peutModifier&&<button style={S.btn()} onClick={ouvrirAjout}>+ Ajouter</button>}
       </div>
       <div style={S.card}>
         <table style={S.tbl}>
@@ -1224,6 +1250,7 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
                   <div style={{display:"flex",gap:6}}>
                     <button onClick={()=>{changerEquipMonitoring(e.id);setOnglet("iot");}} style={{background:"rgba(59,130,246,0.12)",color:"#60A5FA",border:"1px solid rgba(59,130,246,0.2)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>📡</button>
                     <button onClick={()=>setOnglet("ia")} style={{background:"rgba(245,158,11,0.12)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.2)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>🤖</button>
+                    {peutModifier&&<button onClick={()=>ouvrirModification(e)} title="Modifier" style={{background:"rgba(167,139,250,0.12)",color:"#A78BFA",border:"1px solid rgba(167,139,250,0.25)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>✏️</button>}
                     {peutModifier&&<button onClick={()=>supprimerEquipement(e.id)} style={{background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>✕</button>}
                   </div>
                 </td>
@@ -1236,19 +1263,21 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
       {showForm&&(
         <div style={S.overlay}>
           <div style={S.modal}>
-            <h3 style={{marginBottom:20,color:"var(--text)",fontSize:18}}>➕ Nouvel équipement</h3>
+            <h3 style={{marginBottom:20,color:"var(--text)",fontSize:18}}>{enEdition?"✏️ Modifier l'équipement":"➕ Nouvel équipement"}</h3>
             <div style={S.fgrid}>
               <div><label style={S.lbl}>Nom *</label><input style={S.inp} placeholder="Ex: Electrocardiographe" value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div>
               <div><label style={S.lbl}>Marque</label><input style={S.inp} placeholder="Ex: GE Healthcare" value={form.marque} onChange={e=>setForm(p=>({...p,marque:e.target.value}))}/></div>
               <div><label style={S.lbl}>N° Série *</label><input style={S.inp} placeholder="Ex: ECG-2024-001" value={form.numeroSerie} onChange={e=>setForm(p=>({...p,numeroSerie:e.target.value}))}/></div>
               <div><label style={S.lbl}>Service</label><input style={S.inp} placeholder="Ex: Cardiologie" value={form.service} onChange={e=>setForm(p=>({...p,service:e.target.value}))}/></div>
-              <div><label style={S.lbl}>Date acquisition</label><input style={S.inp} type="date" value={form.dateAcquisition} onChange={e=>setForm(p=>({...p,dateAcquisition:e.target.value}))}/></div>
+              <div><label style={S.lbl}>Date acquisition</label><input style={S.inp} type="date" max={new Date().toISOString().split("T")[0]} value={form.dateAcquisition} onChange={e=>setForm(p=>({...p,dateAcquisition:e.target.value}))}/></div>
               <div><label style={S.lbl}>Prochaine maintenance</label><input style={S.inp} type="date" value={form.prochaineMaintenance} onChange={e=>setForm(p=>({...p,prochaineMaintenance:e.target.value}))}/></div>
               <div><label style={S.lbl}>Statut</label><select style={S.sel} value={form.statut} onChange={e=>setForm(p=>({...p,statut:e.target.value}))}><option>En service</option><option>En maintenance</option><option>En panne</option></select></div>
             </div>
+            {enEdition&&<div style={{fontSize:12,color:"var(--muted)",marginBottom:12}}>ℹ️ Le score de risque est recalculé automatiquement. La clé de l'ESP32 n'est pas modifiée.</div>}
+            {erreurForm&&<div style={{background:"rgba(255,77,109,0.1)",border:"1px solid rgba(255,77,109,0.3)",borderRadius:8,padding:"8px 12px",marginBottom:12,color:"#FF4D6D",fontSize:13}}>❌ {erreurForm}</div>}
             <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
-              <button style={S.btnO} onClick={()=>setShowForm(false)}>Annuler</button>
-              <button style={S.btnSolid()} onClick={sauvegarder}>Enregistrer</button>
+              <button style={S.btnO} onClick={fermerForm}>Annuler</button>
+              <button style={S.btnSolid()} onClick={sauvegarder} disabled={envoi}>{envoi?"⏳ Enregistrement...":"Enregistrer"}</button>
             </div>
           </div>
         </div>
