@@ -1212,7 +1212,7 @@ const Calendrier = memo(({maintenances})=>{
 
 const Alertes = memo(({alertes,equipements,lireAlerte,setOnglet})=>(
   <div>
-    {alertes.length>0&&(<div style={S.card}><div style={S.cardTitle}>🔔 Alertes automatiques</div>{alertes.slice(0,10).map(a=>(<div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",marginBottom:8,borderRadius:8,background:a.estLue?"rgba(255,255,255,0.02)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.06)":a.severite==="INFO"?"rgba(0,212,170,0.06)":"rgba(245,158,11,0.06)",border:`1px solid ${a.estLue?"rgba(255,255,255,0.05)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.2)":a.severite==="INFO"?"rgba(0,212,170,0.2)":"rgba(245,158,11,0.2)"}`,opacity:a.estLue?0.6:1}}><div><div style={{fontWeight:700,color:a.severite==="CRITIQUE"?"#FF4D6D":a.severite==="INFO"?"#00D4AA":"#F59E0B",fontSize:13}}>{a.severite==="CRITIQUE"?"🔴":a.severite==="INFO"?"✅":"🟡"} {a.type} — Équipement #{a.equipement_id}</div><div style={{fontSize:12,color:"#475569",marginTop:4}}>{a.message}</div><div style={{fontSize:11,color:"#334155",marginTop:2}}>{formaterDate(a.createdAt)}</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={badge(a.severite)}>{a.severite}</span>{!a.estLue&&<button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>lireAlerte(a.id)}>Lue</button>}</div></div>))}</div>)}
+    {alertes.length>0&&(<div style={S.card}><div style={S.cardTitle}>🔔 Alertes automatiques</div>{alertes.slice(0,10).map(a=>(<div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",marginBottom:8,borderRadius:8,background:a.estLue?"rgba(255,255,255,0.02)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.06)":a.severite==="INFO"?"rgba(0,212,170,0.06)":"rgba(245,158,11,0.06)",border:`1px solid ${a.estLue?"rgba(255,255,255,0.05)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.2)":a.severite==="INFO"?"rgba(0,212,170,0.2)":"rgba(245,158,11,0.2)"}`,opacity:a.estLue?0.6:1}}><div><div style={{fontWeight:700,color:a.severite==="CRITIQUE"?"#FF4D6D":a.severite==="INFO"?"#00D4AA":"#F59E0B",fontSize:13}}>{a.severite==="CRITIQUE"?"🔴":a.severite==="INFO"?"✅":"🟡"} {String(a.type||"").replace(/_/g," ")} — {equipements.find(e=>e.id===a.equipement_id)?.nom||`Équipement #${a.equipement_id}`}</div><div style={{fontSize:12,color:"#475569",marginTop:4}}>{a.message}</div><div style={{fontSize:11,color:"#334155",marginTop:2}}>{formaterDate(a.createdAt)}</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={badge(a.severite)}>{a.severite}</span>{!a.estLue&&<button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>lireAlerte(a.id)}>Lue</button>}</div></div>))}</div>)}
     {equipements.filter(e=>e.scoreRisque>=75).map(e=>(<div key={e.id} style={{background:"rgba(255,77,109,0.06)",border:"1px solid rgba(255,77,109,0.2)",borderRadius:10,padding:16,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontWeight:700,color:"#FF4D6D"}}>🔴 RISQUE CRITIQUE — {e.nom}</div><div style={{fontSize:13,color:"rgba(255,77,109,0.7)",marginTop:4}}>Service : {e.service} | Score : {e.scoreRisque}%</div></div><button style={S.btnSolid("#FF4D6D")} onClick={()=>setOnglet("maintenances")}>Planifier</button></div>))}
     {alertes.length===0&&equipements.filter(e=>e.scoreRisque>=50).length===0&&(<div style={{...S.card,padding:32,textAlign:"center"}}><div style={{fontSize:18,color:"#00D4AA",fontWeight:700}}>✅ Aucune alerte active</div></div>)}
   </div>
@@ -1282,6 +1282,39 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout}){
   const hdrs=useCallback(()=>({"Content-Type":"application/json","Authorization":`Bearer ${token}`}),[token]);
 
   useEffect(()=>{charger();},[]);
+
+  // Rafraîchissement automatique : alertes et statut des équipements toutes les 10 s,
+  // avec une notification quand une nouvelle alerte arrive (pas besoin d'appuyer sur F5)
+  const alertesConnuesRef=useRef(null);
+  const equipementsRef=useRef([]);
+  useEffect(()=>{equipementsRef.current=Array.isArray(equipements)?equipements:[];},[equipements]);
+  useEffect(()=>{if(Array.isArray(alertes)&&alertesConnuesRef.current===null&&!chargement) alertesConnuesRef.current=new Set(alertes.map(a=>a.id));},[alertes,chargement]);
+  useEffect(()=>{
+    const id=setInterval(rafraichirEnDirect,10000);
+    return()=>clearInterval(id);
+  },[]);
+  async function rafraichirEnDirect(){
+    try{
+      const h=hdrs();
+      const [ra,re]=await Promise.all([fetch(`${API}/alertes`,{headers:h}),fetch(`${API}/equipements`,{headers:h})]);
+      if(!ra.ok||!re.ok) return;
+      const liste=await ra.json(),eqs=await re.json();
+      if(!Array.isArray(liste)||!Array.isArray(eqs)) return;
+      const connues=alertesConnuesRef.current;
+      if(connues){
+        const nouvelles=liste.filter(a=>!connues.has(a.id));
+        if(nouvelles.length>0){
+          const a=nouvelles[0];
+          const nom=eqs.find(e=>e.id===a.equipement_id)?.nom||`Équipement #${a.equipement_id}`;
+          const icone=a.severite==="CRITIQUE"?"🔴":a.severite==="INFO"?"✅":"🟡";
+          toast(`${icone} Nouvelle alerte : ${String(a.type||"").replace(/_/g," ")} — ${nom}${nouvelles.length>1?` (+${nouvelles.length-1})`:""}`,a.severite==="CRITIQUE"?"e":"s");
+        }
+      }
+      alertesConnuesRef.current=new Set(liste.map(a=>a.id));
+      setAlertes(liste);
+      setEquipements(eqs);
+    }catch{}
+  }
   // Si l'équipement mémorisé pour le monitoring n'appartient pas à cette organisation
   // (ex. nouveau compte, ou équipement supprimé), on sélectionne le premier de la liste.
   useEffect(()=>{
