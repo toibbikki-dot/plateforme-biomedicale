@@ -38,6 +38,78 @@ function formaterDate(ts) {
   } catch { return ts; }
 }
 
+// ── Tri des listes (IA, Équipements, Maintenances) ───────────
+// Ancienneté d'un équipement = aujourd'hui − date d'acquisition.
+function moisDepuis(date){
+  if(!date) return null;
+  const d=new Date(date);if(isNaN(d)) return null;
+  const now=new Date();
+  let m=(now.getFullYear()-d.getFullYear())*12+(now.getMonth()-d.getMonth());
+  if(now.getDate()<d.getDate()) m--;
+  return Math.max(0,m);
+}
+function texteAnciennete(date){
+  const m=moisDepuis(date);
+  if(m===null) return "—";
+  if(m<1) return "< 1 mois";
+  const a=Math.floor(m/12),r=m%12;
+  const ta=a>0?`${a} an${a>1?"s":""}`:"",tm=r>0?`${r} mois`:"";
+  return [ta,tm].filter(Boolean).join(" ");
+}
+const ORDRE_STATUT_EQUIP={"En panne":0,"En maintenance":1,"En service":2};
+const ORDRE_STATUT_MAINT={"En cours":0,"Planifiée":1,"Terminée":2};
+const texte=v=>(v||"").toString().trim();
+const cmpTexte=(a,b)=>texte(a).localeCompare(texte(b),"fr",{sensitivity:"base",numeric:true});
+// Compare deux valeurs ; les valeurs vides vont toujours à la fin.
+function cmpVide(a,b,cmp){
+  const va=a===null||a===undefined||a==="",vb=b===null||b===undefined||b==="";
+  if(va&&vb) return 0;if(va) return 1;if(vb) return -1;
+  return cmp(a,b);
+}
+const asc=(a,b)=>a<b?-1:a>b?1:0;
+const TRIS_EQUIPEMENT={
+  risque_desc:{label:"Risque : le plus élevé d'abord",cmp:(a,b)=>(b.scoreRisque||0)-(a.scoreRisque||0)},
+  risque_asc:{label:"Risque : le plus faible d'abord",cmp:(a,b)=>(a.scoreRisque||0)-(b.scoreRisque||0)},
+  nom_az:{label:"Nom : A → Z",cmp:(a,b)=>cmpTexte(a.nom,b.nom)},
+  nom_za:{label:"Nom : Z → A",cmp:(a,b)=>cmpTexte(b.nom,a.nom)},
+  age_desc:{label:"Ancienneté : le plus ancien d'abord",cmp:(a,b)=>cmpVide(a.dateAcquisition,b.dateAcquisition,asc)},
+  age_asc:{label:"Ancienneté : le plus récent d'abord",cmp:(a,b)=>cmpVide(a.dateAcquisition,b.dateAcquisition,(x,y)=>asc(y,x))},
+  ajout_recent:{label:"Ajouté récemment d'abord",cmp:(a,b)=>b.id-a.id},
+  ajout_ancien:{label:"Ajouté en premier d'abord",cmp:(a,b)=>a.id-b.id},
+  maint_proche:{label:"Prochaine maintenance : la plus proche",cmp:(a,b)=>cmpVide(a.prochaineMaintenance,b.prochaineMaintenance,asc)},
+  service_az:{label:"Service : A → Z",cmp:(a,b)=>cmpTexte(a.service,b.service)||cmpTexte(a.nom,b.nom)},
+  statut:{label:"Statut : en panne d'abord",cmp:(a,b)=>(ORDRE_STATUT_EQUIP[a.statut]??9)-(ORDRE_STATUT_EQUIP[b.statut]??9)||(b.scoreRisque||0)-(a.scoreRisque||0)},
+};
+const TRIS_MAINTENANCE={
+  date_desc:{label:"Date : la plus récente d'abord",cmp:(a,b)=>cmpVide(a.datePlanifiee,b.datePlanifiee,(x,y)=>asc(y,x))},
+  date_asc:{label:"Date : la plus ancienne d'abord",cmp:(a,b)=>cmpVide(a.datePlanifiee,b.datePlanifiee,asc)},
+  equip_az:{label:"Équipement : A → Z",cmp:(a,b)=>cmpTexte(a.equipementNom,b.equipementNom)},
+  equip_za:{label:"Équipement : Z → A",cmp:(a,b)=>cmpTexte(b.equipementNom,a.equipementNom)},
+  statut:{label:"Statut : en cours → planifiée → terminée",cmp:(a,b)=>(ORDRE_STATUT_MAINT[a.statut]??9)-(ORDRE_STATUT_MAINT[b.statut]??9)},
+  type:{label:"Type : A → Z",cmp:(a,b)=>cmpTexte(a.type,b.type)},
+  technicien_az:{label:"Technicien : A → Z",cmp:(a,b)=>cmpVide(texte(a.technicien),texte(b.technicien),cmpTexte)},
+  ajout_recent:{label:"Ajoutée récemment d'abord",cmp:(a,b)=>b.id-a.id},
+};
+// Trie une copie de la liste (la liste d'origine n'est pas modifiée).
+// En cas d'égalité, l'ordre d'ajout le plus récent départage.
+function trierListe(liste,tris,cle){
+  const t=tris[cle];if(!t) return liste;
+  return [...liste].sort((a,b)=>t.cmp(a,b)||(b.id-a.id));
+}
+// Mémorise le tri choisi pour chaque page (dans ce navigateur).
+function useTri(nomPage,defaut,tris){
+  const [cle,setCle]=useState(()=>{try{const v=localStorage.getItem("tri_"+nomPage);return v&&tris[v]?v:defaut;}catch{return defaut;}});
+  function choisir(v){setCle(v);try{localStorage.setItem("tri_"+nomPage,v);}catch{}}
+  return [cle,choisir];
+}
+function SelecteurTri({tris,valeur,onChange,style}){
+  return(
+    <select style={{...S.sel,maxWidth:300,...style}} value={valeur} onChange={e=>onChange(e.target.value)} title="Ordre de tri">
+      {Object.entries(tris).map(([k,t])=><option key={k} value={k}>↕ {t.label}</option>)}
+    </select>
+  );
+}
+
 // ── Choix du thème de couleur ────────────────────────────────
 const THEMES=[
   {id:"sombre",label:"Sombre",fond:"#041225",bord:"#00D4AA"},
@@ -361,6 +433,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
   const [iaConnectee, setIaConnectee] = useState(false);
   const [equipSelectionne, setEquipSelectionne] = useState(null);
   const [erreurIA, setErreurIA] = useState("");
+  const [triIA, setTriIA] = useTri("ia", "risque_desc", TRIS_EQUIPEMENT);
 
   // Le serveur IA travaille avec l'identité de l'utilisateur connecté :
   // il n'analyse que les équipements de son organisation.
@@ -509,8 +582,9 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
         {/* Analyse par équipement */}
         <div style={S.card}>
           <div style={S.cardTitle}>🔍 Analyser un équipement</div>
+          <SelecteurTri tris={TRIS_EQUIPEMENT} valeur={triIA} onChange={setTriIA} style={{maxWidth:"100%",marginBottom:12}}/>
           <div style={{display:"flex", flexDirection:"column", gap:8}}>
-            {equipements.map(e => (
+            {trierListe(equipements,TRIS_EQUIPEMENT,triIA).map(e => (
               <div key={e.id} onClick={() => analyserEquipement(e.id)}
                 style={{
                   display:"flex", justifyContent:"space-between", alignItems:"center",
@@ -521,7 +595,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
                 }}>
                 <div>
                   <div style={{fontWeight:600, color:"var(--text)", fontSize:13}}>{e.nom}</div>
-                  <div style={{fontSize:11, color:"var(--muted)"}}>{e.service}</div>
+                  <div style={{fontSize:11, color:"var(--muted)"}}>{e.service}{e.dateAcquisition?` · ${texteAnciennete(e.dateAcquisition)}`:""}</div>
                 </div>
                 <div style={{display:"flex", alignItems:"center", gap:8}}>
                   <div style={{width:50, height:4, background:"var(--w08)", borderRadius:2}}>
@@ -1104,6 +1178,8 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
     const r=recherche.toLowerCase();
     return(e.nom?.toLowerCase().includes(r)||e.numeroSerie?.toLowerCase().includes(r)||e.service?.toLowerCase().includes(r))&&(filtreStatut==="Tous"||e.statut===filtreStatut);
   });
+  const [triEq,setTriEq]=useTri("equipements","ajout_recent",TRIS_EQUIPEMENT);
+  const listeTriee=trierListe(filtres,TRIS_EQUIPEMENT,triEq);
 
   async function sauvegarder(){
     if(!form.nom||!form.numeroSerie) return;
@@ -1121,17 +1197,19 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
         <select style={{...S.sel,maxWidth:180}} value={filtreStatut} onChange={e=>setFiltreStatut(e.target.value)}>
           {["Tous","En service","En maintenance","En panne"].map(s=><option key={s}>{s}</option>)}
         </select>
+        <SelecteurTri tris={TRIS_EQUIPEMENT} valeur={triEq} onChange={setTriEq}/>
         {peutModifier&&<button style={S.btn()} onClick={()=>setShowForm(true)}>+ Ajouter</button>}
       </div>
       <div style={S.card}>
         <table style={S.tbl}>
-          <thead><tr>{["Équipement","N° Série","Service","Statut","Risque","Proch. Maint.","Actions"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <thead><tr>{["Équipement","N° Série","Service","Ancienneté","Statut","Risque","Proch. Maint.","Actions"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
           <tbody>
-            {filtres.map(e=>(
+            {listeTriee.map(e=>(
               <tr key={e.id}>
                 <td style={S.td}><div style={{fontWeight:600,color:"var(--text)"}}>{e.nom}</div><div style={{fontSize:11,color:"var(--muted-3)"}}>{e.marque}</div></td>
                 <td style={S.td}><code style={{background:"rgba(0,212,170,0.08)",color:"#00D4AA",padding:"2px 8px",borderRadius:4,fontSize:11}}>{e.numeroSerie}</code></td>
                 <td style={S.td}>{e.service}</td>
+                <td style={S.td}><span style={{color:"var(--text-2)",whiteSpace:"nowrap"}} title={e.dateAcquisition?`Acquis le ${new Date(e.dateAcquisition).toLocaleDateString("fr-FR")}`:"Date d'acquisition non renseignée"}>{texteAnciennete(e.dateAcquisition)}</span></td>
                 <td style={S.td}><span style={badge(e.statut)}>{e.statut}</span></td>
                 <td style={S.td}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -1183,14 +1261,19 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerS
   const [showForm,setShowForm]=useState(false);
   const [form,setForm]=useState({equipementId:"",type:"Préventive",statut:"Planifiée",datePlanifiee:"",technicien:"",description:""});
   function sauvegarder(){ajouterMaintenance(form,()=>{setShowForm(false);setForm({equipementId:"",type:"Préventive",statut:"Planifiée",datePlanifiee:"",technicien:"",description:""});});}
+  const [triM,setTriM]=useTri("maintenances","date_desc",TRIS_MAINTENANCE);
+  const listeTriee=trierListe(maintenances,TRIS_MAINTENANCE,triM);
   return(
     <div>
-      <div style={{marginBottom:20}}><button style={S.btn()} onClick={()=>setShowForm(true)}>+ Planifier une maintenance</button></div>
+      <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <button style={S.btn()} onClick={()=>setShowForm(true)}>+ Planifier une maintenance</button>
+        <SelecteurTri tris={TRIS_MAINTENANCE} valeur={triM} onChange={setTriM}/>
+      </div>
       <div style={S.card}>
         <table style={S.tbl}>
           <thead><tr>{["Équipement","Type","Date","Technicien","Description","Statut","Action"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
           <tbody>
-            {maintenances.map(m=>(
+            {listeTriee.map(m=>(
               <tr key={m.id}>
                 <td style={S.td}><div style={{fontWeight:600,color:"var(--text)"}}>{m.equipementNom}</div></td>
                 <td style={S.td}><span style={{background:m.type==="Préventive"?"rgba(59,130,246,0.12)":"rgba(255,77,109,0.1)",color:m.type==="Préventive"?"#60A5FA":"#FF4D6D",border:`1px solid ${m.type==="Préventive"?"rgba(59,130,246,0.25)":"rgba(255,77,109,0.25)"}`,padding:"3px 10px",borderRadius:999,fontSize:11,fontWeight:600}}>{m.type}</span></td>
@@ -1224,7 +1307,7 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerS
               <div style={{gridColumn:"1 / -1"}}><label style={S.lbl}>Équipement *</label>
                 <select style={S.sel} value={form.equipementId} onChange={e=>setForm(p=>({...p,equipementId:e.target.value}))}>
                   <option value="">-- Sélectionner --</option>
-                  {equipements.map(e=><option key={e.id} value={e.id}>{e.nom} ({e.numeroSerie})</option>)}
+                  {trierListe(equipements,TRIS_EQUIPEMENT,"nom_az").map(e=><option key={e.id} value={e.id}>{e.nom} ({e.numeroSerie})</option>)}
                 </select>
               </div>
               <div><label style={S.lbl}>Type</label><select style={S.sel} value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}><option>Préventive</option><option>Corrective</option><option>Calibration</option></select></div>
