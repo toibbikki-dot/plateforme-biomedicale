@@ -1,0 +1,84 @@
+/* ════════════════════════════════════════════════════════════
+   THÈMES DE COULEUR — sombre (défaut), blanc, bleu ciel, rose clair
+   Le thème est choisi dans la barre latérale et appliqué via
+   l'attribut data-theme sur <html>.
+   ════════════════════════════════════════════════════════════ */
+:root,
+:root[data-theme="sombre"] {
+  --bg-grad: linear-gradient(135deg,#020B18 0%,#041225 30%,#060D1F 60%,#02091A 100%);
+  --page-bg: #020B18;
+  --text: #FFFFFF;
+  --text-2: #CBD5E1;
+  --text-3: #94A3B8;
+  --muted: #475569;
+  --muted-2: #64748B;
+  --muted-3: #334155;
+  --muted-4: #1E293B;
+  --w02: rgba(255,255,255,0.02);
+  --w03: rgba(255,255,255,0.03);
+  --w04: rgba(255,255,255,0.04);
+  --w05: rgba(255,255,255,0.05);
+  --w06: rgba(255,255,255,0.06);
+  --w08: rgba(255,255,255,0.08);
+  --w1: rgba(255,255,255,0.1);
+  --sidebar-bg: rgba(2,11,24,0.92);
+  --panel-bg: rgba(4,18,37,0.88);
+  --modal-bg: rgba(4,18,37,0.98);
+  --select-bg: rgba(15,23,42,0.9);
+  --tooltip-bg: #041225;
+  --code-bg: rgba(0,0,0,0.35);
+  --shadow: 0 25px 60px rgba(0,0,0,0.6);
+  color-scheme: dark;
+}
+
+/* Valeurs communes aux thèmes clairs */
+:root[data-theme="blanc"],
+:root[data-theme="bleu"],
+:root[data-theme="rose"] {
+  --text: #0F172A;
+  --text-2: #1E293B;
+  --text-3: #475569;
+  --muted: #475569;
+  --muted-2: #64748B;
+  --muted-3: #94A3B8;
+  --muted-4: #CBD5E1;
+  --w02: rgba(255,255,255,0.55);
+  --w03: rgba(255,255,255,0.75);
+  --w04: rgba(15,23,42,0.06);
+  --w05: rgba(255,255,255,0.9);
+  --w06: rgba(15,23,42,0.10);
+  --w08: rgba(15,23,42,0.07);
+  --w1: rgba(15,23,42,0.15);
+  --select-bg: #FFFFFF;
+  --tooltip-bg: #FFFFFF;
+  --code-bg: rgba(15,23,42,0.06);
+  --shadow: 0 20px 50px rgba(15,23,42,0.18);
+  color-scheme: light;
+}
+
+:root[data-theme="blanc"] {
+  --bg-grad: linear-gradient(135deg,#FFFFFF 0%,#F8FAFC 50%,#F1F5F9 100%);
+  --page-bg: #F8FAFC;
+  --sidebar-bg: rgba(255,255,255,0.96);
+  --panel-bg: rgba(255,255,255,0.95);
+  --modal-bg: #FFFFFF;
+}
+
+:root[data-theme="bleu"] {
+  --bg-grad: linear-gradient(135deg,#E0F2FE 0%,#F0F9FF 45%,#DBEAFE 100%);
+  --page-bg: #E0F2FE;
+  --sidebar-bg: rgba(240,249,255,0.96);
+  --panel-bg: rgba(248,252,255,0.95);
+  --modal-bg: #F8FCFF;
+}
+
+:root[data-theme="rose"] {
+  --bg-grad: linear-gradient(135deg,#FCE7F3 0%,#FFF1F7 45%,#FDF2F8 100%);
+  --page-bg: #FCE7F3;
+  --sidebar-bg: rgba(255,241,247,0.96);
+  --panel-bg: rgba(255,250,252,0.95);
+  --modal-bg: #FFFAFC;
+}
+
+body { background: var(--page-bg); }
+select option { background: var(--select-bg); color: var(--text); }

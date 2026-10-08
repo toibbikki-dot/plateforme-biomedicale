@@ -23,7 +23,7 @@ function badge(statut) {
     "ADMIN":{background:"rgba(124,58,237,0.15)",color:"#A78BFA",border:"1px solid rgba(124,58,237,0.3)"},
     "INGENIEUR":{background:"rgba(59,130,246,0.15)",color:"#60A5FA",border:"1px solid rgba(59,130,246,0.3)"},
     "TECHNICIEN":{background:"rgba(0,212,170,0.15)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.3)"},
-  }[statut]||{background:"rgba(255,255,255,0.08)",color:"#94A3B8",border:"1px solid rgba(255,255,255,0.1)"};
+  }[statut]||{background:"var(--w08)",color:"var(--text-3)",border:"1px solid var(--w1)"};
   return {...s,padding:"3px 12px",borderRadius:"999px",fontSize:"11px",fontWeight:600,display:"inline-block"};
 }
 
@@ -36,6 +36,35 @@ function formaterDate(ts) {
     if (isNaN(d)) return ts;
     return d.toLocaleDateString("fr-FR") + " " + d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
   } catch { return ts; }
+}
+
+// ── Choix du thème de couleur ────────────────────────────────
+const THEMES=[
+  {id:"sombre",label:"Sombre",fond:"#041225",bord:"#00D4AA"},
+  {id:"blanc",label:"Blanc",fond:"#FFFFFF",bord:"#94A3B8"},
+  {id:"bleu",label:"Bleu ciel",fond:"#BAE6FD",bord:"#0EA5E9"},
+  {id:"rose",label:"Rose clair",fond:"#FBCFE8",bord:"#EC4899"},
+];
+function SelecteurTheme(){
+  const [theme,setTheme]=useState(()=>{try{return localStorage.getItem("theme")||"sombre";}catch{return "sombre";}});
+  function choisir(id){
+    setTheme(id);
+    document.documentElement.dataset.theme=id;
+    try{localStorage.setItem("theme",id);}catch{}
+  }
+  return(
+    <div style={{marginBottom:10}}>
+      <div style={{fontSize:10,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6,textAlign:"center"}}>Thème</div>
+      <div style={{display:"flex",justifyContent:"center",gap:10}}>
+        {THEMES.map(t=>(
+          <button key={t.id} title={t.label} aria-label={`Thème ${t.label}`} onClick={()=>choisir(t.id)}
+            style={{width:22,height:22,borderRadius:"50%",background:t.fond,cursor:"pointer",padding:0,
+              border:theme===t.id?`2px solid ${t.bord}`:"1px solid var(--w1)",
+              boxShadow:theme===t.id?`0 0 0 2px ${t.bord}40`:"none"}}/>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Fond animé ───────────────────────────────────────────────
@@ -51,7 +80,7 @@ const AnimatedBackground = memo(() => {
   }));
   return (
     <div style={{position:"fixed",inset:0,overflow:"hidden",zIndex:0,pointerEvents:"none"}}>
-      <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,#020B18 0%,#041225 30%,#060D1F 60%,#02091A 100%)"}}/>
+      <div style={{position:"absolute",inset:0,background:"var(--bg-grad)"}}/>
       <div style={{position:"absolute",inset:0,backgroundImage:`linear-gradient(rgba(0,212,170,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,170,0.03) 1px,transparent 1px)`,backgroundSize:"60px 60px"}}/>
       <div style={{position:"absolute",top:"-10%",left:"-5%",width:"50vw",height:"50vw",borderRadius:"50%",background:"radial-gradient(circle,rgba(0,212,170,0.06) 0%,transparent 70%)"}}/>
       <div style={{position:"absolute",bottom:"-10%",right:"-5%",width:"60vw",height:"60vw",borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,0.05) 0%,transparent 70%)"}}/>
@@ -72,32 +101,32 @@ const AnimatedBackground = memo(() => {
 // ════════════════════════════════════════════════════════════
 const S = {
   app:{fontFamily:"'Segoe UI',sans-serif",background:"transparent",minHeight:"100vh"},
-  sidebar:{width:250,background:"rgba(2,11,24,0.92)",backdropFilter:"blur(20px)",borderRight:"1px solid rgba(0,212,170,0.12)",position:"fixed",top:0,left:0,height:"100vh",display:"flex",flexDirection:"column",zIndex:100},
+  sidebar:{width:250,background:"var(--sidebar-bg)",backdropFilter:"blur(20px)",borderRight:"1px solid rgba(0,212,170,0.12)",position:"fixed",top:0,left:0,height:"100vh",display:"flex",flexDirection:"column",zIndex:100},
   sidebarTop:{padding:"28px 24px",borderBottom:"1px solid rgba(0,212,170,0.1)",background:"rgba(0,212,170,0.03)"},
   sidebarTitle:{fontSize:15,fontWeight:800,color:"#00D4AA",marginBottom:4,letterSpacing:"0.05em"},
-  sidebarSub:{fontSize:10,color:"#475569",letterSpacing:"0.1em",textTransform:"uppercase"},
-  nav:(a)=>({display:"flex",alignItems:"center",gap:12,padding:"11px 24px",cursor:"pointer",fontSize:13,background:a?"rgba(0,212,170,0.08)":"transparent",color:a?"#00D4AA":"#64748B",borderLeft:a?"3px solid #00D4AA":"3px solid transparent",transition:"all 0.15s"}),
+  sidebarSub:{fontSize:10,color:"var(--muted)",letterSpacing:"0.1em",textTransform:"uppercase"},
+  nav:(a)=>({display:"flex",alignItems:"center",gap:12,padding:"11px 24px",cursor:"pointer",fontSize:13,background:a?"rgba(0,212,170,0.08)":"transparent",color:a?"#00D4AA":"var(--muted-2)",borderLeft:a?"3px solid #00D4AA":"3px solid transparent",transition:"all 0.15s"}),
   main:{marginLeft:250,padding:"36px",position:"relative",zIndex:1},
-  title:{fontSize:26,fontWeight:800,color:"white",marginBottom:6,letterSpacing:"-0.02em"},
-  sub:{fontSize:13,color:"#475569",marginBottom:28},
+  title:{fontSize:26,fontWeight:800,color:"var(--text)",marginBottom:6,letterSpacing:"-0.02em"},
+  sub:{fontSize:13,color:"var(--muted)",marginBottom:28},
   kgrid:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:16,marginBottom:32},
-  kcard:(c)=>({background:"rgba(255,255,255,0.03)",backdropFilter:"blur(10px)",borderRadius:12,padding:20,border:`1px solid ${c}25`,borderTop:`2px solid ${c}`,boxShadow:`0 0 20px ${c}08`}),
-  kval:{fontSize:34,fontWeight:900,color:"white"},
-  klbl:{fontSize:12,color:"#475569",marginTop:4},
-  card:{background:"rgba(255,255,255,0.03)",backdropFilter:"blur(10px)",borderRadius:14,padding:24,border:"1px solid rgba(255,255,255,0.06)",marginBottom:24},
-  cardTitle:{fontSize:15,fontWeight:700,color:"white",marginBottom:16},
+  kcard:(c)=>({background:"var(--w03)",backdropFilter:"blur(10px)",borderRadius:12,padding:20,border:`1px solid ${c}25`,borderTop:`2px solid ${c}`,boxShadow:`0 0 20px ${c}08`}),
+  kval:{fontSize:34,fontWeight:900,color:"var(--text)"},
+  klbl:{fontSize:12,color:"var(--muted)",marginTop:4},
+  card:{background:"var(--w03)",backdropFilter:"blur(10px)",borderRadius:14,padding:24,border:"1px solid var(--w06)",marginBottom:24},
+  cardTitle:{fontSize:15,fontWeight:700,color:"var(--text)",marginBottom:16},
   btn:(c="#00D4AA")=>({background:`${c}18`,color:c,border:`1px solid ${c}40`,padding:"9px 18px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,transition:"all 0.15s"}),
   btnSolid:(c="#00D4AA")=>({background:c,color:"#020B18",border:"none",padding:"10px 20px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}),
   btnO:{background:"transparent",color:"#60A5FA",border:"1px solid rgba(96,165,250,0.3)",padding:"9px 18px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600},
   tbl:{width:"100%",borderCollapse:"collapse",fontSize:13},
-  th:{textAlign:"left",padding:"10px 14px",background:"rgba(255,255,255,0.03)",color:"#475569",fontWeight:600,fontSize:11,textTransform:"uppercase",letterSpacing:"0.08em",borderBottom:"1px solid rgba(255,255,255,0.06)"},
-  td:{padding:"12px 14px",borderBottom:"1px solid rgba(255,255,255,0.04)",color:"#CBD5E1"},
-  inp:{width:"100%",padding:"10px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:13,color:"white",boxSizing:"border-box",outline:"none"},
-  sel:{width:"100%",padding:"10px 14px",background:"rgba(15,23,42,0.9)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:13,color:"white",boxSizing:"border-box"},
-  lbl:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6,display:"block",textTransform:"uppercase",letterSpacing:"0.06em"},
+  th:{textAlign:"left",padding:"10px 14px",background:"var(--w03)",color:"var(--muted)",fontWeight:600,fontSize:11,textTransform:"uppercase",letterSpacing:"0.08em",borderBottom:"1px solid var(--w06)"},
+  td:{padding:"12px 14px",borderBottom:"1px solid var(--w04)",color:"var(--text-2)"},
+  inp:{width:"100%",padding:"10px 14px",background:"var(--w05)",border:"1px solid var(--w1)",borderRadius:8,fontSize:13,color:"var(--text)",boxSizing:"border-box",outline:"none"},
+  sel:{width:"100%",padding:"10px 14px",background:"var(--select-bg)",border:"1px solid var(--w1)",borderRadius:8,fontSize:13,color:"var(--text)",boxSizing:"border-box"},
+  lbl:{fontSize:11,fontWeight:700,color:"var(--muted-2)",marginBottom:6,display:"block",textTransform:"uppercase",letterSpacing:"0.06em"},
   fgrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20},
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200},
-  modal:{background:"rgba(4,18,37,0.98)",backdropFilter:"blur(20px)",borderRadius:16,padding:32,width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.6)"},
+  modal:{background:"var(--modal-bg)",backdropFilter:"blur(20px)",borderRadius:16,padding:32,width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"var(--shadow)"},
   toast:(t)=>({position:"fixed",top:24,right:24,zIndex:999,background:t==="e"?"rgba(255,77,109,0.15)":"rgba(0,212,170,0.12)",backdropFilter:"blur(10px)",border:`1px solid ${t==="e"?"rgba(255,77,109,0.4)":"rgba(0,212,170,0.4)"}`,color:t==="e"?"#FF4D6D":"#00D4AA",padding:"12px 20px",borderRadius:10,fontWeight:600,fontSize:14,boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}),
 };
 
@@ -132,10 +161,10 @@ function PageConnexion({onLogin,onGoToInscription}) {
       <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:460,padding:"0 24px"}}>
         <div style={{textAlign:"center",marginBottom:40}}>
           <div style={{width:80,height:80,borderRadius:"50%",margin:"0 auto 16px",background:"rgba(0,212,170,0.1)",border:"2px solid rgba(0,212,170,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,boxShadow:"0 0 40px rgba(0,212,170,0.15)"}}>🏥</div>
-          <h1 style={{fontSize:28,fontWeight:900,color:"white",margin:0,letterSpacing:"-0.02em"}}>BioMed Plateforme</h1>
-          <p style={{fontSize:12,color:"#475569",marginTop:6,textTransform:"uppercase",letterSpacing:"0.15em"}}>Gestion Intelligente du Parc Biomédical</p>
+          <h1 style={{fontSize:28,fontWeight:900,color:"var(--text)",margin:0,letterSpacing:"-0.02em"}}>BioMed Plateforme</h1>
+          <p style={{fontSize:12,color:"var(--muted)",marginTop:6,textTransform:"uppercase",letterSpacing:"0.15em"}}>Gestion Intelligente du Parc Biomédical</p>
         </div>
-        <div style={{background:"rgba(4,18,37,0.85)",backdropFilter:"blur(20px)",borderRadius:20,padding:"40px 36px",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
+        <div style={{background:"var(--panel-bg)",backdropFilter:"blur(20px)",borderRadius:20,padding:"40px 36px",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
           <div style={{marginBottom:20}}>
             <label style={S.lbl}>Adresse email</label>
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&seConnecter()} placeholder="votre@email.com" style={S.inp}/>
@@ -149,7 +178,7 @@ function PageConnexion({onLogin,onGoToInscription}) {
             {chargement?"Connexion...":"→ Se connecter"}
           </button>
           <div style={{marginTop:24,textAlign:"center"}}>
-            <span style={{fontSize:13,color:"#475569"}}>Pas encore de compte ? </span>
+            <span style={{fontSize:13,color:"var(--muted)"}}>Pas encore de compte ? </span>
             <span onClick={onGoToInscription} style={{fontSize:13,color:"#00D4AA",fontWeight:700,cursor:"pointer"}}>Créez-en un</span>
           </div>
         </div>
@@ -209,17 +238,17 @@ function PageInscription({onLogin,onRetourConnexion}) {
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",fontFamily:"'Segoe UI',sans-serif"}}>
         <AnimatedBackground/>
         <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:460,padding:"0 24px",textAlign:"center"}}>
-          <div style={{background:"rgba(4,18,37,0.9)",backdropFilter:"blur(20px)",borderRadius:20,padding:"40px 36px",border:"1px solid rgba(0,212,170,0.2)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
+          <div style={{background:"var(--panel-bg)",backdropFilter:"blur(20px)",borderRadius:20,padding:"40px 36px",border:"1px solid rgba(0,212,170,0.2)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
             <div style={{fontSize:44,marginBottom:12}}>🎉</div>
-            <h2 style={{color:"white",fontSize:20,marginBottom:8}}>Organisation créée !</h2>
-            <p style={{color:"#94A3B8",fontSize:13,marginBottom:20}}>Chaque code donne un rôle précis à la personne qui l'utilise pour rejoindre votre organisation. Vous les retrouverez à tout moment dans la page « Utilisateurs ».</p>
+            <h2 style={{color:"var(--text)",fontSize:20,marginBottom:8}}>Organisation créée !</h2>
+            <p style={{color:"var(--text-3)",fontSize:13,marginBottom:20}}>Chaque code donne un rôle précis à la personne qui l'utilise pour rejoindre votre organisation. Vous les retrouverez à tout moment dans la page « Utilisateurs ».</p>
             <div style={{background:"rgba(0,212,170,0.1)",border:"2px dashed rgba(0,212,170,0.4)",borderRadius:12,padding:"16px",marginBottom:12}}>
-              <div style={{fontSize:11,color:"#475569",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>🛠️ Code Technicien — à partager avec l'équipe</div>
+              <div style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>🛠️ Code Technicien — à partager avec l'équipe</div>
               <div style={{fontSize:28,fontWeight:900,color:"#00D4AA",letterSpacing:"0.15em"}}>{codeGenere}</div>
             </div>
             {codeIngenieurGenere&&(
               <div style={{background:"rgba(59,130,246,0.1)",border:"2px dashed rgba(59,130,246,0.4)",borderRadius:12,padding:"16px",marginBottom:24}}>
-                <div style={{fontSize:11,color:"#475569",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>🔧 Code Ingénieur — à donner aux ingénieurs seulement</div>
+                <div style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>🔧 Code Ingénieur — à donner aux ingénieurs seulement</div>
                 <div style={{fontSize:28,fontWeight:900,color:"#60A5FA",letterSpacing:"0.15em"}}>{codeIngenieurGenere}</div>
               </div>
             )}
@@ -239,8 +268,8 @@ function PageInscription({onLogin,onRetourConnexion}) {
         <AnimatedBackground/>
         <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:520,padding:"0 24px"}}>
           <div style={{textAlign:"center",marginBottom:32}}>
-            <h1 style={{fontSize:24,fontWeight:900,color:"white",margin:0}}>Créer votre compte</h1>
-            <p style={{fontSize:13,color:"#475569",marginTop:8}}>Choisissez comment vous souhaitez utiliser la plateforme</p>
+            <h1 style={{fontSize:24,fontWeight:900,color:"var(--text)",margin:0}}>Créer votre compte</h1>
+            <p style={{fontSize:13,color:"var(--muted)",marginTop:8}}>Choisissez comment vous souhaitez utiliser la plateforme</p>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             {[
@@ -248,17 +277,17 @@ function PageInscription({onLogin,onRetourConnexion}) {
               {id:"CREER_ORGANISATION",icon:"🏥",titre:"Créer une organisation",desc:"Vous êtes responsable d'un hôpital/service. Un code sera généré pour inviter votre équipe.",c:"#A78BFA"},
               {id:"REJOINDRE_ORGANISATION",icon:"🔑",titre:"Rejoindre une organisation",desc:"Un administrateur vous a donné un code d'invitation. Ce code détermine votre rôle (technicien ou ingénieur).",c:"#60A5FA"},
             ].map(opt=>(
-              <div key={opt.id} onClick={()=>setMode(opt.id)} style={{cursor:"pointer",background:"rgba(4,18,37,0.85)",backdropFilter:"blur(20px)",borderRadius:14,padding:"20px 24px",border:`1px solid ${opt.c}30`,display:"flex",alignItems:"center",gap:16,transition:"all 0.15s"}}>
+              <div key={opt.id} onClick={()=>setMode(opt.id)} style={{cursor:"pointer",background:"var(--panel-bg)",backdropFilter:"blur(20px)",borderRadius:14,padding:"20px 24px",border:`1px solid ${opt.c}30`,display:"flex",alignItems:"center",gap:16,transition:"all 0.15s"}}>
                 <div style={{fontSize:32,width:50,height:50,borderRadius:12,background:`${opt.c}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{opt.icon}</div>
                 <div>
-                  <div style={{fontWeight:700,color:"white",fontSize:15,marginBottom:4}}>{opt.titre}</div>
-                  <div style={{fontSize:12,color:"#64748B"}}>{opt.desc}</div>
+                  <div style={{fontWeight:700,color:"var(--text)",fontSize:15,marginBottom:4}}>{opt.titre}</div>
+                  <div style={{fontSize:12,color:"var(--muted-2)"}}>{opt.desc}</div>
                 </div>
               </div>
             ))}
           </div>
           <div style={{marginTop:24,textAlign:"center"}}>
-            <span onClick={onRetourConnexion} style={{fontSize:13,color:"#475569",cursor:"pointer"}}>← Retour à la connexion</span>
+            <span onClick={onRetourConnexion} style={{fontSize:13,color:"var(--muted)",cursor:"pointer"}}>← Retour à la connexion</span>
           </div>
         </div>
       </div>
@@ -279,9 +308,9 @@ function PageInscription({onLogin,onRetourConnexion}) {
       <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:460,padding:"0 24px"}}>
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{width:64,height:64,borderRadius:"50%",margin:"0 auto 12px",background:`${t.c}15`,border:`2px solid ${t.c}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>{t.icon}</div>
-          <h2 style={{color:"white",fontSize:20,margin:0}}>{t.titre}</h2>
+          <h2 style={{color:"var(--text)",fontSize:20,margin:0}}>{t.titre}</h2>
         </div>
-        <div style={{background:"rgba(4,18,37,0.85)",backdropFilter:"blur(20px)",borderRadius:20,padding:"32px",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
+        <div style={{background:"var(--panel-bg)",backdropFilter:"blur(20px)",borderRadius:20,padding:"32px",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
           <div style={S.fgrid}>
             <div><label style={S.lbl}>Nom *</label><input style={S.inp} value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div>
             <div><label style={S.lbl}>Prénom</label><input style={S.inp} value={form.prenom} onChange={e=>setForm(p=>({...p,prenom:e.target.value}))}/></div>
@@ -304,7 +333,7 @@ function PageInscription({onLogin,onRetourConnexion}) {
             <div style={{marginBottom:16}}>
               <label style={S.lbl}>Code d'invitation *</label>
               <input style={{...S.inp,letterSpacing:"0.1em",fontWeight:700}} placeholder="Ex: AB3X9K2P" value={form.codeInvitation} onChange={e=>setForm(p=>({...p,codeInvitation:e.target.value.toUpperCase()}))}/>
-              <div style={{fontSize:11,color:"#475569",marginTop:6}}>Votre rôle (technicien ou ingénieur) dépend du code que l'administrateur vous a transmis.</div>
+              <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>Votre rôle (technicien ou ingénieur) dépend du code que l'administrateur vous a transmis.</div>
             </div>
           )}
           {erreur&&<div style={{background:"rgba(255,77,109,0.1)",border:"1px solid rgba(255,77,109,0.3)",borderRadius:8,padding:"10px 14px",marginBottom:16,color:"#FF4D6D",fontSize:13}}>❌ {erreur}</div>}
@@ -312,7 +341,7 @@ function PageInscription({onLogin,onRetourConnexion}) {
             {chargement?"Création...":"→ Créer mon compte"}
           </button>
           <div style={{textAlign:"center"}}>
-            <span onClick={()=>setMode(null)} style={{fontSize:13,color:"#475569",cursor:"pointer"}}>← Changer de mode</span>
+            <span onClick={()=>setMode(null)} style={{fontSize:13,color:"var(--muted)",cursor:"pointer"}}>← Changer de mode</span>
           </div>
         </div>
       </div>
@@ -419,8 +448,8 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
   if (!iaConnectee) return (
     <div style={{...S.card, padding:48, textAlign:"center"}}>
       <div style={{fontSize:56, marginBottom:16}}>🤖</div>
-      <div style={{fontSize:20, fontWeight:700, color:"white", marginBottom:8}}>Serveur IA non connecté</div>
-      <div style={{fontSize:14, color:"#475569", marginBottom:24, maxWidth:400, margin:"0 auto 24px"}}>
+      <div style={{fontSize:20, fontWeight:700, color:"var(--text)", marginBottom:8}}>Serveur IA non connecté</div>
+      <div style={{fontSize:14, color:"var(--muted)", marginBottom:24, maxWidth:400, margin:"0 auto 24px"}}>
         Le serveur IA (service « perpetual-strength » sur Railway) ne répond pas.
         Vérifiez qu'il est en ligne, puis réessayez.
       </div>
@@ -435,8 +464,8 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
         <div style={{display:"flex", alignItems:"center", gap:12}}>
           <div style={{width:12, height:12, borderRadius:"50%", background:"#00D4AA", boxShadow:"0 0 8px #00D4AA"}}/>
           <div>
-            <div style={{fontWeight:700, color:"white", fontSize:15}}>🤖 Serveur IA connecté</div>
-            <div style={{fontSize:12, color:"#475569"}}>
+            <div style={{fontWeight:700, color:"var(--text)", fontSize:15}}>🤖 Serveur IA connecté</div>
+            <div style={{fontSize:12, color:"var(--muted)"}}>
               {statsIA?.organisation ? `Organisation : ${statsIA.organisation} — ` : ""}
               Modèle : {statsIA?.modele_entraine ? `RandomForest entraîné sur ${statsIA.modele_nb_equipements} équipement(s)` : "non entraîné (méthode heuristique)"}
             </div>
@@ -486,16 +515,16 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
                 style={{
                   display:"flex", justifyContent:"space-between", alignItems:"center",
                   padding:"10px 14px", borderRadius:8, cursor:"pointer",
-                  background: equipSelectionne===e.id ? "rgba(0,212,170,0.08)" : "rgba(255,255,255,0.02)",
-                  border: equipSelectionne===e.id ? "1px solid rgba(0,212,170,0.3)" : "1px solid rgba(255,255,255,0.05)",
+                  background: equipSelectionne===e.id ? "rgba(0,212,170,0.08)" : "var(--w02)",
+                  border: equipSelectionne===e.id ? "1px solid rgba(0,212,170,0.3)" : "1px solid var(--w05)",
                   transition:"all 0.15s",
                 }}>
                 <div>
-                  <div style={{fontWeight:600, color:"white", fontSize:13}}>{e.nom}</div>
-                  <div style={{fontSize:11, color:"#475569"}}>{e.service}</div>
+                  <div style={{fontWeight:600, color:"var(--text)", fontSize:13}}>{e.nom}</div>
+                  <div style={{fontSize:11, color:"var(--muted)"}}>{e.service}</div>
                 </div>
                 <div style={{display:"flex", alignItems:"center", gap:8}}>
-                  <div style={{width:50, height:4, background:"rgba(255,255,255,0.08)", borderRadius:2}}>
+                  <div style={{width:50, height:4, background:"var(--w08)", borderRadius:2}}>
                     <div style={{width:`${e.scoreRisque}%`, height:"100%", background:riskColor(e.scoreRisque), borderRadius:2}}/>
                   </div>
                   <span style={{fontWeight:700, color:riskColor(e.scoreRisque), fontSize:13}}>{e.scoreRisque}%</span>
@@ -509,7 +538,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
         <div style={S.card}>
           <div style={S.cardTitle}>📊 Résultat de l'analyse IA</div>
           {chargement ? (
-            <div style={{textAlign:"center", padding:40, color:"#475569"}}>
+            <div style={{textAlign:"center", padding:40, color:"var(--muted)"}}>
               <div style={{fontSize:36, marginBottom:12}}>⏳</div>
               <div>Analyse en cours...</div>
             </div>
@@ -519,14 +548,14 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
               <div style={{textAlign:"center", marginBottom:20}}>
                 <div style={{
                   width:140, height:140, borderRadius:"50%",
-                  background:`conic-gradient(${predictionDetail.couleur} ${predictionDetail.pourcentage * 3.6}deg, rgba(255,255,255,0.05) 0deg)`,
+                  background:`conic-gradient(${predictionDetail.couleur} ${predictionDetail.pourcentage * 3.6}deg, var(--w05) 0deg)`,
                   display:"flex", alignItems:"center", justifyContent:"center",
                   margin:"0 auto",
                   boxShadow:`0 0 30px ${predictionDetail.couleur}30`,
                 }}>
-                  <div style={{width:110, height:110, borderRadius:"50%", background:"rgba(4,18,37,0.95)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center"}}>
+                  <div style={{width:110, height:110, borderRadius:"50%", background:"var(--panel-bg)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center"}}>
                     <div style={{fontSize:28, fontWeight:900, color:predictionDetail.couleur}}>{predictionDetail.pourcentage}%</div>
-                    <div style={{fontSize:10, color:"#475569", textTransform:"uppercase", letterSpacing:"0.05em"}}>Risque panne</div>
+                    <div style={{fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em"}}>Risque panne</div>
                   </div>
                 </div>
                 <div style={{marginTop:12}}>
@@ -534,22 +563,22 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
                 </div>
               </div>
 
-              <div style={{background:"rgba(255,255,255,0.02)", borderRadius:8, padding:14, marginBottom:12}}>
-                <div style={{fontSize:11, color:"#475569", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em"}}>Équipement</div>
-                <div style={{fontWeight:700, color:"white"}}>{predictionDetail.equipement_nom}</div>
+              <div style={{background:"var(--w02)", borderRadius:8, padding:14, marginBottom:12}}>
+                <div style={{fontSize:11, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em"}}>Équipement</div>
+                <div style={{fontWeight:700, color:"var(--text)"}}>{predictionDetail.equipement_nom}</div>
               </div>
 
-              <div style={{background:"rgba(255,255,255,0.02)", borderRadius:8, padding:14, marginBottom:12}}>
-                <div style={{fontSize:11, color:"#475569", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em"}}>Délai estimé avant panne</div>
+              <div style={{background:"var(--w02)", borderRadius:8, padding:14, marginBottom:12}}>
+                <div style={{fontSize:11, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em"}}>Délai estimé avant panne</div>
                 <div style={{fontWeight:700, color:predictionDetail.couleur, fontSize:18}}>~{predictionDetail.delai_estime_jours} jours</div>
               </div>
 
-              <div style={{background:"rgba(255,255,255,0.02)", borderRadius:8, padding:14, marginBottom:12}}>
-                <div style={{fontSize:11, color:"#475569", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em"}}>Facteurs clés</div>
+              <div style={{background:"var(--w02)", borderRadius:8, padding:14, marginBottom:12}}>
+                <div style={{fontSize:11, color:"var(--muted)", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em"}}>Facteurs clés</div>
                 {predictionDetail.facteurs_cles?.map((f,i)=>(
                   <div key={i} style={{display:"flex", alignItems:"center", gap:8, marginBottom:4}}>
                     <div style={{width:4, height:4, borderRadius:"50%", background:predictionDetail.couleur, flexShrink:0}}/>
-                    <div style={{fontSize:12, color:"#CBD5E1"}}>{f}</div>
+                    <div style={{fontSize:12, color:"var(--text-2)"}}>{f}</div>
                   </div>
                 ))}
               </div>
@@ -566,7 +595,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
               )}
             </div>
           ) : (
-            <div style={{textAlign:"center", padding:40, color:"#334155"}}>
+            <div style={{textAlign:"center", padding:40, color:"var(--muted-3)"}}>
               <div style={{fontSize:36, marginBottom:12}}>🤖</div>
               <div>Sélectionnez un équipement à gauche pour l'analyser</div>
             </div>
@@ -585,10 +614,10 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
             <tbody>
               {predictions.map((p,i)=>(
                 <tr key={i}>
-                  <td style={S.td}><div style={{fontWeight:600, color:"white"}}>{p.equipement_nom}</div></td>
+                  <td style={S.td}><div style={{fontWeight:600, color:"var(--text)"}}>{p.equipement_nom}</div></td>
                   <td style={S.td}>
                     <div style={{display:"flex", alignItems:"center", gap:8}}>
-                      <div style={{width:70, height:5, background:"rgba(255,255,255,0.08)", borderRadius:3}}>
+                      <div style={{width:70, height:5, background:"var(--w08)", borderRadius:3}}>
                         <div style={{width:`${p.pourcentage}%`, height:"100%", background:p.couleur, borderRadius:3}}/>
                       </div>
                       <span style={{fontWeight:700, color:p.couleur}}>{p.pourcentage}%</span>
@@ -596,7 +625,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
                   </td>
                   <td style={S.td}><span style={badge(p.niveau_risque)}>{p.niveau_risque}</span></td>
                   <td style={S.td}><span style={{color:p.couleur, fontWeight:600}}>~{p.delai_estime_jours} jours</span></td>
-                  <td style={{...S.td, fontSize:12, color:"#64748B", maxWidth:200}}>{p.recommandation?.substring(0,60)}...</td>
+                  <td style={{...S.td, fontSize:12, color:"var(--muted-2)", maxWidth:200}}>{p.recommandation?.substring(0,60)}...</td>
                   <td style={S.td}>
                     <button onClick={()=>{setPredictionDetail(p);setEquipSelectionne(p.equipement_id);window.scrollTo(0,0);}}
                       style={{...S.btn("#60A5FA"), fontSize:11, padding:"4px 10px"}}>
@@ -647,8 +676,8 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
             <Pie data={pieStatuts} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({name,value})=>`${name}: ${value}`}>
               {pieStatuts.map((_,i)=><Cell key={i} fill={COULEURS[i]}/>)}
             </Pie>
-            <Tooltip contentStyle={{background:"#041225",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,color:"white"}}/>
-            <Legend wrapperStyle={{color:"#94A3B8",fontSize:12}}/>
+            <Tooltip contentStyle={{background:"var(--tooltip-bg)",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,color:"var(--text)"}}/>
+            <Legend wrapperStyle={{color:"var(--text-3)",fontSize:12}}/>
           </PieChart>
         </ResponsiveContainer>
       </div>
@@ -656,9 +685,9 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
         <div style={S.cardTitle}>🏥 Équipements par service</div>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={barServices}>
-            <XAxis dataKey="service" tick={{fontSize:11,fill:"#64748B"}}/>
-            <YAxis allowDecimals={false} tick={{fill:"#64748B"}}/>
-            <Tooltip contentStyle={{background:"#041225",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,color:"white"}}/>
+            <XAxis dataKey="service" tick={{fontSize:11,fill:"var(--muted-2)"}}/>
+            <YAxis allowDecimals={false} tick={{fill:"var(--muted-2)"}}/>
+            <Tooltip contentStyle={{background:"var(--tooltip-bg)",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,color:"var(--text)"}}/>
             <Bar dataKey="count" name="Équipements" fill="#00D4AA" radius={[4,4,0,0]}/>
           </BarChart>
         </ResponsiveContainer>
@@ -672,22 +701,22 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
             <Pie data={pieMaint} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({name,value})=>`${name}: ${value}`}>
               {pieMaint.map((_,i)=><Cell key={i} fill={["#3B82F6","#F59E0B","#00D4AA"][i]}/>)}
             </Pie>
-            <Tooltip contentStyle={{background:"#041225",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,color:"white"}}/>
+            <Tooltip contentStyle={{background:"var(--tooltip-bg)",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,color:"var(--text)"}}/>
           </PieChart>
         </ResponsiveContainer>
       </div>
       <div style={S.card}>
         <div style={S.cardTitle}>⚠️ Risques élevés</div>
         {equipements.filter(e=>e.scoreRisque>=50).sort((a,b)=>b.scoreRisque-a.scoreRisque).slice(0,4).map(e=>(
-          <div key={e.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+          <div key={e.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--w04)"}}>
             <div>
-              <div style={{fontWeight:600,fontSize:13,color:"white"}}>{e.nom}</div>
-              <div style={{fontSize:11,color:"#475569"}}>{e.service}</div>
+              <div style={{fontWeight:600,fontSize:13,color:"var(--text)"}}>{e.nom}</div>
+              <div style={{fontSize:11,color:"var(--muted)"}}>{e.service}</div>
             </div>
             <div style={{fontWeight:800,color:riskColor(e.scoreRisque),fontSize:18}}>{e.scoreRisque}%</div>
           </div>
         ))}
-        {equipements.filter(e=>e.scoreRisque>=50).length===0&&<div style={{color:"#475569",fontSize:13}}>✅ Aucun risque élevé</div>}
+        {equipements.filter(e=>e.scoreRisque>=50).length===0&&<div style={{color:"var(--muted)",fontSize:13}}>✅ Aucun risque élevé</div>}
       </div>
     </div>
   </div>
@@ -826,9 +855,9 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
       {showConfigModal&&(
         <div style={S.overlay}>
           <div style={{...S.modal,maxWidth:600}}>
-            <h3 style={{marginBottom:8,color:"white"}}>⚙️ Configurer les capteurs</h3>
+            <h3 style={{marginBottom:8,color:"var(--text)"}}>⚙️ Configurer les capteurs</h3>
             <div style={{background:"rgba(0,212,170,0.08)",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,padding:"10px 14px",marginBottom:20}}>
-              <span style={{fontSize:12,color:"#475569"}}>Équipement : </span>
+              <span style={{fontSize:12,color:"var(--muted)"}}>Équipement : </span>
               <span style={{fontWeight:700,color:"#00D4AA"}}>{equipementActuel?.nom||"—"}</span>
             </div>
             <div style={{marginBottom:16}}>
@@ -839,14 +868,14 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
                 style={{...S.inp,maxWidth:100}}
               />
             </div>
-            <div style={{fontSize:12,color:"#64748B",marginBottom:14,lineHeight:1.6}}>
+            <div style={{fontSize:12,color:"var(--muted-2)",marginBottom:14,lineHeight:1.6}}>
               Seuils : laissez une case vide pour ne pas fixer de limite de ce côté.
               Une mesure en dehors de la plage déclenche une alerte « Anomalie », et les seuils sont envoyés automatiquement à l'ESP32.
             </div>
             {[...Array(configForm.nb_capteurs_actifs)].map((_,i)=>{
               const idx=i+1;
               return(
-                <div key={idx} style={{border:"1px solid rgba(255,255,255,0.06)",borderRadius:10,padding:"14px 14px 2px",marginBottom:12}}>
+                <div key={idx} style={{border:"1px solid var(--w06)",borderRadius:10,padding:"14px 14px 2px",marginBottom:12}}>
                   <div style={{fontSize:12,fontWeight:700,color:"#A78BFA",marginBottom:10}}>Capteur {idx} — param{idx}</div>
                   <div style={{...S.fgrid,marginBottom:12}}>
                     <div>
@@ -914,11 +943,11 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
           )}
         </div>
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-          <div style={{fontSize:10,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:"0.1em"}}>Monitoring</div>
-          <button onClick={toggleMonitoring} style={{padding:"10px 28px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:14,background:monitoringActif?"#00D4AA":"rgba(255,255,255,0.08)",color:monitoringActif?"#020B18":"#64748B",boxShadow:monitoringActif?"0 0 20px rgba(0,212,170,0.4)":"none"}}>
+          <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.1em"}}>Monitoring</div>
+          <button onClick={toggleMonitoring} style={{padding:"10px 28px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:14,background:monitoringActif?"#00D4AA":"var(--w08)",color:monitoringActif?"#020B18":"var(--muted-2)",boxShadow:monitoringActif?"0 0 20px rgba(0,212,170,0.4)":"none"}}>
             {monitoringActif?"⏹️ Arrêter":"▶️ Démarrer"}
           </button>
-          <div style={{fontSize:11,color:monitoringActif?"#00D4AA":"#334155",fontWeight:600}}>{monitoringActif?"● EN COURS":"○ INACTIF"}</div>
+          <div style={{fontSize:11,color:monitoringActif?"#00D4AA":"var(--muted-3)",fontWeight:600}}>{monitoringActif?"● EN COURS":"○ INACTIF"}</div>
         </div>
       </div>
 
@@ -926,7 +955,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
       {peutModifier&&equipementActuel&&(
         <div style={S.card}>
           <div style={S.cardTitle}>🔑 Clé de l'appareil ESP32 — {equipementActuel.nom}</div>
-          <div style={{fontSize:13,color:"#64748B",marginBottom:14,lineHeight:1.6}}>
+          <div style={{fontSize:13,color:"var(--muted-2)",marginBottom:14,lineHeight:1.6}}>
             Cette clé secrète identifie l'ESP32 installé sur cet équipement. Copiez-la dans le programme Arduino
             (ligne <code style={{color:"#A78BFA"}}>DEVICE_KEY</code>) avant de le téléverser. Ne la partagez pas.
           </div>
@@ -934,7 +963,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
             <button style={S.btn("#A78BFA")} onClick={()=>afficherCle(false)}>👁️ Afficher la clé</button>
           ):(
             <>
-              <div style={{fontFamily:"monospace",fontSize:13,color:"#00D4AA",background:"rgba(0,0,0,0.35)",border:"1px solid rgba(0,212,170,0.25)",borderRadius:8,padding:"12px 14px",wordBreak:"break-all",userSelect:"all",marginBottom:12}}>
+              <div style={{fontFamily:"monospace",fontSize:13,color:"#00D4AA",background:"var(--code-bg)",border:"1px solid rgba(0,212,170,0.25)",borderRadius:8,padding:"12px 14px",wordBreak:"break-all",userSelect:"all",marginBottom:12}}>
                 const char* DEVICE_KEY = "{cleAppareil}";
               </div>
               <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
@@ -953,13 +982,13 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:16,marginBottom:24}}>
             <div style={{background:"rgba(0,212,170,0.08)",border:"1px solid rgba(0,212,170,0.2)",borderRadius:12,padding:20,textAlign:"center"}}>
               <div style={{fontSize:32}}>{dernier?.etat?"⚡":"💤"}</div>
-              <div style={{fontSize:28,fontWeight:900,color:dernier?.etat?"#00D4AA":"#475569",marginTop:4}}>{dernier?.etat?"Actif":"Inactif"}</div>
-              <div style={{fontSize:12,color:"#475569",marginTop:4}}>État</div>
+              <div style={{fontSize:28,fontWeight:900,color:dernier?.etat?"#00D4AA":"var(--muted)",marginTop:4}}>{dernier?.etat?"Actif":"Inactif"}</div>
+              <div style={{fontSize:12,color:"var(--muted)",marginTop:4}}>État</div>
             </div>
             <div style={{background:"rgba(255,77,109,0.08)",border:"1px solid rgba(255,77,109,0.2)",borderRadius:12,padding:20,textAlign:"center"}}>
               <div style={{fontSize:32}}>{dernier?.panne?"🔴":"✅"}</div>
               <div style={{fontSize:28,fontWeight:900,color:dernier?.panne?"#FF4D6D":"#00D4AA",marginTop:4}}>{dernier?.panne?"OUI":"NON"}</div>
-              <div style={{fontSize:12,color:"#475569",marginTop:4}}>Panne</div>
+              <div style={{fontSize:12,color:"var(--muted)",marginTop:4}}>Panne</div>
             </div>
             {(()=>{
               const alertes=depassementsSeuils(capteursConfig,dernier);
@@ -969,7 +998,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
                 <div style={{background:`${c}14`,border:`1px solid ${c}40`,borderRadius:12,padding:20,textAlign:"center",boxShadow:enAlerte?`0 0 18px ${c}30`:"none"}}>
                   <div style={{fontSize:32}}>{!dernier?"⏳":enAlerte?"⚠️":"✅"}</div>
                   <div style={{fontSize:24,fontWeight:900,color:c,marginTop:4}}>{!dernier?"--":enAlerte?"ALERTE":"NORMAL"}</div>
-                  <div style={{fontSize:12,color:"#475569",marginTop:4}}>Seuils</div>
+                  <div style={{fontSize:12,color:"var(--muted)",marginTop:4}}>Seuils</div>
                   {enAlerte&&<div style={{fontSize:11,color:"#F59E0B",marginTop:8,lineHeight:1.5,textAlign:"left"}}>{alertes.map((a,k)=><div key={k}>• {a}</div>)}</div>}
                 </div>
               );
@@ -982,11 +1011,11 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
               const sens=etatSeuil(capteursConfig,idx,val);
               const c=sens?"#F59E0B":null;
               return(
-                <div key={idx} style={{background:c?`${c}14`:"rgba(255,255,255,0.03)",border:`1px solid ${c?`${c}50`:"rgba(255,255,255,0.06)"}`,borderRadius:12,padding:20,textAlign:"center"}}>
+                <div key={idx} style={{background:c?`${c}14`:"var(--w03)",border:`1px solid ${c?`${c}50`:"var(--w06)"}`,borderRadius:12,padding:20,textAlign:"center"}}>
                   <div style={{fontSize:32}}>{sens==="haut"?"🔺":sens==="bas"?"🔻":"📊"}</div>
-                  <div style={{fontSize:24,fontWeight:900,color:c||"white",marginTop:4}}>{val!==null&&!isNaN(val)?val.toFixed(2):"--"}</div>
-                  <div style={{fontSize:12,color:"#475569",marginTop:4}}>{nom} {unite&&`(${unite})`}</div>
-                  <div style={{fontSize:10,color:c||"#334155",marginTop:6}}>{texteSeuils(capteursConfig,idx)}</div>
+                  <div style={{fontSize:24,fontWeight:900,color:c||"var(--text)",marginTop:4}}>{val!==null&&!isNaN(val)?val.toFixed(2):"--"}</div>
+                  <div style={{fontSize:12,color:"var(--muted)",marginTop:4}}>{nom} {unite&&`(${unite})`}</div>
+                  <div style={{fontSize:10,color:c||"var(--muted-3)",marginTop:6}}>{texteSeuils(capteursConfig,idx)}</div>
                 </div>
               );
             })}
@@ -1003,8 +1032,8 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
                     <div style={S.cardTitle}>📈 Évolution {nom} {unite&&`(${unite})`}</div>
                     <ResponsiveContainer width="100%" height={200}>
                       <LineChart data={chartData}>
-                        <XAxis dataKey="i" hide/><YAxis tick={{fill:"#64748B"}}/>
-                        <Tooltip contentStyle={{background:"#041225",border:`1px solid ${couleur}30`,borderRadius:8,color:"white"}} formatter={v=>`${v} ${unite}`}/>
+                        <XAxis dataKey="i" hide/><YAxis tick={{fill:"var(--muted-2)"}}/>
+                        <Tooltip contentStyle={{background:"var(--tooltip-bg)",border:`1px solid ${couleur}30`,borderRadius:8,color:"var(--text)"}} formatter={v=>`${v} ${unite}`}/>
                         <Line type="monotone" dataKey={`param${idx}`} stroke={couleur} strokeWidth={2} dot={false}/>
                       </LineChart>
                     </ResponsiveContainer>
@@ -1017,8 +1046,8 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
       ):(
         <div style={{...S.card,padding:48,textAlign:"center"}}>
           <div style={{fontSize:48,marginBottom:16}}>📡</div>
-          <div style={{fontSize:18,fontWeight:700,color:"white",marginBottom:8}}>Monitoring désactivé</div>
-          <div style={{fontSize:14,color:"#475569",marginBottom:24}}>
+          <div style={{fontSize:18,fontWeight:700,color:"var(--text)",marginBottom:8}}>Monitoring désactivé</div>
+          <div style={{fontSize:14,color:"var(--muted)",marginBottom:24}}>
             {equipementActuel?`Appuyez sur "▶️ Démarrer" pour surveiller ${equipementActuel.nom} en temps réel.`:"Sélectionnez d'abord un équipement ci-dessus, puis démarrez le monitoring."}
           </div>
           <button onClick={toggleMonitoring} style={{...S.btnSolid("#00D4AA"),fontSize:15,padding:"12px 32px"}}>▶️ Démarrer le monitoring</button>
@@ -1027,7 +1056,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
       <div style={{...S.card,marginTop:24}}>
         <div style={S.cardTitle}>📋 Historique des mesures ({iotData.length} entrées)</div>
         {iotData.length===0?(
-          <div style={{textAlign:"center",padding:32,color:"#334155"}}><div style={{fontSize:32,marginBottom:8}}>📂</div><div>Aucune donnée disponible</div></div>
+          <div style={{textAlign:"center",padding:32,color:"var(--muted-3)"}}><div style={{fontSize:32,marginBottom:8}}>📂</div><div>Aucune donnée disponible</div></div>
         ):(
           <table style={S.tbl}>
             <thead>
@@ -1045,12 +1074,12 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
             <tbody>
               {[...iotData].reverse().slice(0,15).map((d,i)=>(
                 <tr key={i}>
-                  <td style={{...S.td,fontSize:12,color:"#475569"}}>{formaterDate(d.timestamp)}</td>
+                  <td style={{...S.td,fontSize:12,color:"var(--muted)"}}>{formaterDate(d.timestamp)}</td>
                   {capteursConfig&&[...Array(capteursConfig.nb_capteurs_actifs||2)].map((_,j)=>{
                     const idx=j+1;
                     const val=d[`param${idx}`];
                     const hors=etatSeuil(capteursConfig,idx,parseFloat(val));
-                    return <td key={idx} style={S.td}><span style={{color:hors?"#F59E0B":"white",fontWeight:700}}>{val!==null&&val!==undefined?parseFloat(val).toFixed(2):"--"}{hors==="haut"?" 🔺":hors==="bas"?" 🔻":""}</span></td>;
+                    return <td key={idx} style={S.td}><span style={{color:hors?"#F59E0B":"var(--text)",fontWeight:700}}>{val!==null&&val!==undefined?parseFloat(val).toFixed(2):"--"}{hors==="haut"?" 🔺":hors==="bas"?" 🔻":""}</span></td>;
                   })}
                   <td style={S.td}>{depassementsSeuils(capteursConfig,d).length>0?<span style={{color:"#F59E0B"}}>⚠️ Alerte</span>:"✅ Normal"}</td>
                   <td style={S.td}>{d.etat==1?"⚡ Actif":"💤 Inactif"}</td>
@@ -1100,19 +1129,19 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
           <tbody>
             {filtres.map(e=>(
               <tr key={e.id}>
-                <td style={S.td}><div style={{fontWeight:600,color:"white"}}>{e.nom}</div><div style={{fontSize:11,color:"#334155"}}>{e.marque}</div></td>
+                <td style={S.td}><div style={{fontWeight:600,color:"var(--text)"}}>{e.nom}</div><div style={{fontSize:11,color:"var(--muted-3)"}}>{e.marque}</div></td>
                 <td style={S.td}><code style={{background:"rgba(0,212,170,0.08)",color:"#00D4AA",padding:"2px 8px",borderRadius:4,fontSize:11}}>{e.numeroSerie}</code></td>
                 <td style={S.td}>{e.service}</td>
                 <td style={S.td}><span style={badge(e.statut)}>{e.statut}</span></td>
                 <td style={S.td}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:60,height:5,background:"rgba(255,255,255,0.08)",borderRadius:3}}>
+                    <div style={{width:60,height:5,background:"var(--w08)",borderRadius:3}}>
                       <div style={{width:`${e.scoreRisque}%`,height:"100%",background:riskColor(e.scoreRisque),borderRadius:3}}/>
                     </div>
                     <span style={{fontWeight:700,color:riskColor(e.scoreRisque),fontSize:13}}>{e.scoreRisque}%</span>
                   </div>
                 </td>
-                <td style={S.td}><span style={{color:"#475569"}}>{e.prochaineMaintenance||"—"}</span></td>
+                <td style={S.td}><span style={{color:"var(--muted)"}}>{e.prochaineMaintenance||"—"}</span></td>
                 <td style={S.td}>
                   <div style={{display:"flex",gap:6}}>
                     <button onClick={()=>{changerEquipMonitoring(e.id);setOnglet("iot");}} style={{background:"rgba(59,130,246,0.12)",color:"#60A5FA",border:"1px solid rgba(59,130,246,0.2)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>📡</button>
@@ -1124,12 +1153,12 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
             ))}
           </tbody>
         </table>
-        {filtres.length===0&&<div style={{textAlign:"center",padding:40,color:"#334155"}}>Aucun équipement trouvé</div>}
+        {filtres.length===0&&<div style={{textAlign:"center",padding:40,color:"var(--muted-3)"}}>Aucun équipement trouvé</div>}
       </div>
       {showForm&&(
         <div style={S.overlay}>
           <div style={S.modal}>
-            <h3 style={{marginBottom:20,color:"white",fontSize:18}}>➕ Nouvel équipement</h3>
+            <h3 style={{marginBottom:20,color:"var(--text)",fontSize:18}}>➕ Nouvel équipement</h3>
             <div style={S.fgrid}>
               <div><label style={S.lbl}>Nom *</label><input style={S.inp} placeholder="Ex: Electrocardiographe" value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div>
               <div><label style={S.lbl}>Marque</label><input style={S.inp} placeholder="Ex: GE Healthcare" value={form.marque} onChange={e=>setForm(p=>({...p,marque:e.target.value}))}/></div>
@@ -1163,11 +1192,11 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerS
           <tbody>
             {maintenances.map(m=>(
               <tr key={m.id}>
-                <td style={S.td}><div style={{fontWeight:600,color:"white"}}>{m.equipementNom}</div></td>
+                <td style={S.td}><div style={{fontWeight:600,color:"var(--text)"}}>{m.equipementNom}</div></td>
                 <td style={S.td}><span style={{background:m.type==="Préventive"?"rgba(59,130,246,0.12)":"rgba(255,77,109,0.1)",color:m.type==="Préventive"?"#60A5FA":"#FF4D6D",border:`1px solid ${m.type==="Préventive"?"rgba(59,130,246,0.25)":"rgba(255,77,109,0.25)"}`,padding:"3px 10px",borderRadius:999,fontSize:11,fontWeight:600}}>{m.type}</span></td>
                 <td style={S.td}>{m.datePlanifiee}</td>
                 <td style={S.td}>{m.technicien||"—"}</td>
-                <td style={{...S.td,color:"#475569"}}>{m.description}</td>
+                <td style={{...S.td,color:"var(--muted)"}}>{m.description}</td>
                 <td style={S.td}><span style={badge(m.statut)}>{m.statut}</span></td>
                 <td style={S.td}>
                   {m.statut==="Planifiée"&&(
@@ -1179,18 +1208,18 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerS
                   {m.statut==="En cours"&&(
                     <button style={{...S.btn("#00D4AA"),fontSize:11,padding:"4px 10px"}} onClick={()=>changerStatutMaintenance(m,"Terminée")}>✅ Terminer</button>
                   )}
-                  {m.statut==="Terminée"&&<span style={{fontSize:11,color:"#475569"}}>{m.dateTerminee?`Terminée le ${formaterDate(m.dateTerminee)}`:"—"}</span>}
+                  {m.statut==="Terminée"&&<span style={{fontSize:11,color:"var(--muted)"}}>{m.dateTerminee?`Terminée le ${formaterDate(m.dateTerminee)}`:"—"}</span>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {maintenances.length===0&&<div style={{textAlign:"center",padding:40,color:"#334155"}}>Aucune maintenance</div>}
+        {maintenances.length===0&&<div style={{textAlign:"center",padding:40,color:"var(--muted-3)"}}>Aucune maintenance</div>}
       </div>
       {showForm&&(
         <div style={S.overlay}>
           <div style={S.modal}>
-            <h3 style={{marginBottom:20,color:"white",fontSize:18}}>🔧 Planifier une maintenance</h3>
+            <h3 style={{marginBottom:20,color:"var(--text)",fontSize:18}}>🔧 Planifier une maintenance</h3>
             <div style={S.fgrid}>
               <div style={{gridColumn:"1 / -1"}}><label style={S.lbl}>Équipement *</label>
                 <select style={S.sel} value={form.equipementId} onChange={e=>setForm(p=>({...p,equipementId:e.target.value}))}>
@@ -1227,15 +1256,15 @@ const Calendrier = memo(({maintenances})=>{
       <div style={S.card}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
           <button style={S.btnO} onClick={()=>setMoisCal(new Date(moisCal.getFullYear(),moisCal.getMonth()-1))}>← Précédent</button>
-          <div style={{fontSize:18,fontWeight:700,color:"white",textTransform:"capitalize"}}>{moisCal.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div>
+          <div style={{fontSize:18,fontWeight:700,color:"var(--text)",textTransform:"capitalize"}}>{moisCal.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div>
           <button style={S.btnO} onClick={()=>setMoisCal(new Date(moisCal.getFullYear(),moisCal.getMonth()+1))}>Suivant →</button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-          {nomsJ.map(j=><div key={j} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"#334155",padding:"8px 0",textTransform:"uppercase",letterSpacing:"0.05em"}}>{j}</div>)}
+          {nomsJ.map(j=><div key={j} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--muted-3)",padding:"8px 0",textTransform:"uppercase",letterSpacing:"0.05em"}}>{j}</div>)}
           {jours.map((date,i)=>{
             const maints=date?maintenances.filter(m=>m.datePlanifiee===date.toISOString().split("T")[0]):[];
             const auj=date&&date.toDateString()===new Date().toDateString();
-            return(<div key={i} style={{minHeight:68,padding:6,borderRadius:8,background:auj?"rgba(0,212,170,0.08)":date?"rgba(255,255,255,0.02)":"transparent",border:auj?"1px solid rgba(0,212,170,0.3)":date?"1px solid rgba(255,255,255,0.04)":"none"}}>{date&&<><div style={{fontSize:13,fontWeight:auj?700:400,color:auj?"#00D4AA":"#64748B"}}>{date.getDate()}</div>{maints.map(m=><div key={m.id} style={{fontSize:9,padding:"2px 4px",borderRadius:3,marginTop:2,background:m.type==="Préventive"?"rgba(59,130,246,0.2)":"rgba(255,77,109,0.15)",color:m.type==="Préventive"?"#60A5FA":"#FF4D6D",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔧 {m.equipementNom}</div>)}</>}</div>);
+            return(<div key={i} style={{minHeight:68,padding:6,borderRadius:8,background:auj?"rgba(0,212,170,0.08)":date?"var(--w02)":"transparent",border:auj?"1px solid rgba(0,212,170,0.3)":date?"1px solid var(--w04)":"none"}}>{date&&<><div style={{fontSize:13,fontWeight:auj?700:400,color:auj?"#00D4AA":"var(--muted-2)"}}>{date.getDate()}</div>{maints.map(m=><div key={m.id} style={{fontSize:9,padding:"2px 4px",borderRadius:3,marginTop:2,background:m.type==="Préventive"?"rgba(59,130,246,0.2)":"rgba(255,77,109,0.15)",color:m.type==="Préventive"?"#60A5FA":"#FF4D6D",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔧 {m.equipementNom}</div>)}</>}</div>);
           })}
         </div>
       </div>
@@ -1245,7 +1274,7 @@ const Calendrier = memo(({maintenances})=>{
 
 const Alertes = memo(({alertes,equipements,lireAlerte,setOnglet})=>(
   <div>
-    {alertes.length>0&&(<div style={S.card}><div style={S.cardTitle}>🔔 Alertes automatiques</div>{alertes.slice(0,10).map(a=>(<div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",marginBottom:8,borderRadius:8,background:a.estLue?"rgba(255,255,255,0.02)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.06)":a.severite==="INFO"?"rgba(0,212,170,0.06)":"rgba(245,158,11,0.06)",border:`1px solid ${a.estLue?"rgba(255,255,255,0.05)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.2)":a.severite==="INFO"?"rgba(0,212,170,0.2)":"rgba(245,158,11,0.2)"}`,opacity:a.estLue?0.6:1}}><div><div style={{fontWeight:700,color:a.severite==="CRITIQUE"?"#FF4D6D":a.severite==="INFO"?"#00D4AA":"#F59E0B",fontSize:13}}>{a.severite==="CRITIQUE"?"🔴":a.severite==="INFO"?"✅":"🟡"} {String(a.type||"").replace(/_/g," ")} — {equipements.find(e=>e.id===a.equipement_id)?.nom||`Équipement #${a.equipement_id}`}</div><div style={{fontSize:12,color:"#475569",marginTop:4}}>{a.message}</div><div style={{fontSize:11,color:"#334155",marginTop:2}}>{formaterDate(a.createdAt)}</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={badge(a.severite)}>{a.severite}</span>{!a.estLue&&<button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>lireAlerte(a.id)}>Lue</button>}</div></div>))}</div>)}
+    {alertes.length>0&&(<div style={S.card}><div style={S.cardTitle}>🔔 Alertes automatiques</div>{alertes.slice(0,10).map(a=>(<div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",marginBottom:8,borderRadius:8,background:a.estLue?"var(--w02)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.06)":a.severite==="INFO"?"rgba(0,212,170,0.06)":"rgba(245,158,11,0.06)",border:`1px solid ${a.estLue?"var(--w05)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.2)":a.severite==="INFO"?"rgba(0,212,170,0.2)":"rgba(245,158,11,0.2)"}`,opacity:a.estLue?0.6:1}}><div><div style={{fontWeight:700,color:a.severite==="CRITIQUE"?"#FF4D6D":a.severite==="INFO"?"#00D4AA":"#F59E0B",fontSize:13}}>{a.severite==="CRITIQUE"?"🔴":a.severite==="INFO"?"✅":"🟡"} {String(a.type||"").replace(/_/g," ")} — {equipements.find(e=>e.id===a.equipement_id)?.nom||`Équipement #${a.equipement_id}`}</div><div style={{fontSize:12,color:"var(--muted)",marginTop:4}}>{a.message}</div><div style={{fontSize:11,color:"var(--muted-3)",marginTop:2}}>{formaterDate(a.createdAt)}</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={badge(a.severite)}>{a.severite}</span>{!a.estLue&&<button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>lireAlerte(a.id)}>Lue</button>}</div></div>))}</div>)}
     {equipements.filter(e=>e.scoreRisque>=75).map(e=>(<div key={e.id} style={{background:"rgba(255,77,109,0.06)",border:"1px solid rgba(255,77,109,0.2)",borderRadius:10,padding:16,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontWeight:700,color:"#FF4D6D"}}>🔴 RISQUE CRITIQUE — {e.nom}</div><div style={{fontSize:13,color:"rgba(255,77,109,0.7)",marginTop:4}}>Service : {e.service} | Score : {e.scoreRisque}%</div></div><button style={S.btnSolid("#FF4D6D")} onClick={()=>setOnglet("maintenances")}>Planifier</button></div>))}
     {alertes.length===0&&equipements.filter(e=>e.scoreRisque>=50).length===0&&(<div style={{...S.card,padding:32,textAlign:"center"}}><div style={{fontSize:18,color:"#00D4AA",fontWeight:700}}>✅ Aucune alerte active</div></div>)}
   </div>
@@ -1271,12 +1300,12 @@ const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,rea
       {codes&&(
         <div style={S.card}>
           <div style={S.cardTitle}>🔑 Codes d'invitation de {organisation?.nom||"votre organisation"}</div>
-          <div style={{fontSize:13,color:"#64748B",marginBottom:16,lineHeight:1.6}}>Le code utilisé à l'inscription (« Rejoindre une organisation ») détermine le rôle de la personne. Pour nommer un administrateur, changez le rôle dans le tableau ci-dessous.</div>
+          <div style={{fontSize:13,color:"var(--muted-2)",marginBottom:16,lineHeight:1.6}}>Le code utilisé à l'inscription (« Rejoindre une organisation ») détermine le rôle de la personne. Pour nommer un administrateur, changez le rôle dans le tableau ci-dessous.</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16}}>
             {[{role:"TECHNICIEN",titre:"🛠️ Code Technicien",aide:"À partager avec l'équipe de terrain",code:codes.technicien,c:"#00D4AA"},{role:"INGENIEUR",titre:"🔧 Code Ingénieur",aide:"À donner aux ingénieurs biomédicaux seulement",code:codes.ingenieur,c:"#60A5FA"}].map(k=>(
               <div key={k.role} style={{background:`${k.c}10`,border:`1px solid ${k.c}40`,borderRadius:12,padding:16}}>
-                <div style={{fontSize:13,fontWeight:700,color:"white"}}>{k.titre}</div>
-                <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{k.aide}</div>
+                <div style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>{k.titre}</div>
+                <div style={{fontSize:11,color:"var(--muted)",marginBottom:10}}>{k.aide}</div>
                 <div style={{fontSize:24,fontWeight:900,color:k.c,letterSpacing:"0.12em",userSelect:"all",marginBottom:10}}>{k.code}</div>
                 <button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>regenererCode(k.role)}>🔄 Régénérer</button>
               </div>
@@ -1287,20 +1316,20 @@ const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,rea
       {erreurCodes&&<div style={{color:"#FF4D6D",fontSize:13,marginBottom:12}}>❌ {erreurCodes}</div>}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:20}}>
         <button style={S.btn()} onClick={()=>setShowForm(true)}>+ Ajouter un utilisateur</button>
-        <div style={{fontSize:12,color:"#64748B"}}>
-          👑 Administrateurs : <strong style={{color:nbAdmins>=MAX_ADMINS?"#F59E0B":"white"}}>{nbAdmins} / {MAX_ADMINS}</strong> (le propriétaire + {MAX_ADMINS-1} adjoints maximum)
+        <div style={{fontSize:12,color:"var(--muted-2)"}}>
+          👑 Administrateurs : <strong style={{color:nbAdmins>=MAX_ADMINS?"#F59E0B":"var(--text)"}}>{nbAdmins} / {MAX_ADMINS}</strong> (le propriétaire + {MAX_ADMINS-1} adjoints maximum)
           {!jeSuisProprio&&<span> — seul le propriétaire peut nommer ou retirer un administrateur</span>}
         </div>
       </div>
       <div style={S.card}>
         <table style={S.tbl}>
           <thead><tr>{["Nom","Email","Rôle","Statut","Créé le","Actions"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
-          <tbody>{utilisateurs.map(u=>(<tr key={u.id} style={{opacity:u.actif?1:0.5}}><td style={S.td}><div style={{fontWeight:600,color:"white"}}>{u.prenom} {u.nom}</div></td><td style={{...S.td,color:"#475569"}}>{u.email}</td><td style={S.td}>{u.est_proprietaire?<span style={{...badge("ADMIN"),background:"rgba(245,158,11,0.15)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.35)"}}>👑 PROPRIÉTAIRE</span>
+          <tbody>{utilisateurs.map(u=>(<tr key={u.id} style={{opacity:u.actif?1:0.5}}><td style={S.td}><div style={{fontWeight:600,color:"var(--text)"}}>{u.prenom} {u.nom}</div></td><td style={{...S.td,color:"var(--muted)"}}>{u.email}</td><td style={S.td}>{u.est_proprietaire?<span style={{...badge("ADMIN"),background:"rgba(245,158,11,0.15)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.35)"}}>👑 PROPRIÉTAIRE</span>
       :(u.actif===1&&(u.role!=="ADMIN"||jeSuisProprio))?<select value={u.role} onChange={e=>changerRole(u,e.target.value)} title="Changer le rôle" style={{...badge(u.role),cursor:"pointer",outline:"none",appearance:"auto"}}><option value="TECHNICIEN">TECHNICIEN</option><option value="INGENIEUR">INGENIEUR</option>{(jeSuisProprio||u.role==="ADMIN")&&<option value="ADMIN" disabled={u.role!=="ADMIN"&&nbAdmins>=MAX_ADMINS}>ADMIN{u.role==="ADMIN"?" (adjoint)":nbAdmins>=MAX_ADMINS?" — limite atteinte":""}</option>}</select>
-      :<span style={badge(u.role)}>{u.role}{u.role==="ADMIN"?" (adjoint)":""}</span>}</td><td style={S.td}><span style={badge(u.actif?"En service":"En panne")}>{u.actif?"✅ Actif":"❌ Inactif"}</span></td><td style={{...S.td,color:"#334155"}}>{u.createdAt?.split("T")[0]||u.createdAt}</td><td style={S.td}><div style={{display:"flex",gap:6}}>{jeSuisProprio&&u.role==="ADMIN"&&u.actif===1&&!u.est_proprietaire&&<button onClick={()=>transfererPropriete(u)} style={{background:"rgba(245,158,11,0.1)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.25)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>👑 Transférer la propriété</button>}{u.id!==currentUserId&&u.actif===1&&!u.est_proprietaire&&(u.role!=="ADMIN"||jeSuisProprio)&&<button onClick={()=>desactiverUtilisateur(u.id)} style={{background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>🚫 Désactiver</button>}{u.actif===0&&(u.role!=="ADMIN"||jeSuisProprio)&&<button onClick={()=>reactiverUtilisateur(u.id)} style={{background:"rgba(0,212,170,0.1)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>✅ Réactiver</button>}{u.id===currentUserId&&<span style={{fontSize:11,color:"#334155",fontStyle:"italic"}}>Votre compte</span>}</div></td></tr>))}</tbody>
+      :<span style={badge(u.role)}>{u.role}{u.role==="ADMIN"?" (adjoint)":""}</span>}</td><td style={S.td}><span style={badge(u.actif?"En service":"En panne")}>{u.actif?"✅ Actif":"❌ Inactif"}</span></td><td style={{...S.td,color:"var(--muted-3)"}}>{u.createdAt?.split("T")[0]||u.createdAt}</td><td style={S.td}><div style={{display:"flex",gap:6}}>{jeSuisProprio&&u.role==="ADMIN"&&u.actif===1&&!u.est_proprietaire&&<button onClick={()=>transfererPropriete(u)} style={{background:"rgba(245,158,11,0.1)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.25)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>👑 Transférer la propriété</button>}{u.id!==currentUserId&&u.actif===1&&!u.est_proprietaire&&(u.role!=="ADMIN"||jeSuisProprio)&&<button onClick={()=>desactiverUtilisateur(u.id)} style={{background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>🚫 Désactiver</button>}{u.actif===0&&(u.role!=="ADMIN"||jeSuisProprio)&&<button onClick={()=>reactiverUtilisateur(u.id)} style={{background:"rgba(0,212,170,0.1)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>✅ Réactiver</button>}{u.id===currentUserId&&<span style={{fontSize:11,color:"var(--muted-3)",fontStyle:"italic"}}>Votre compte</span>}</div></td></tr>))}</tbody>
         </table>
       </div>
-      {showForm&&(<div style={S.overlay}><div style={S.modal}><h3 style={{marginBottom:20,color:"white",fontSize:18}}>👤 Nouvel utilisateur</h3><div style={S.fgrid}><div><label style={S.lbl}>Nom *</label><input style={S.inp} placeholder="Nom de famille" value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div><div><label style={S.lbl}>Prénom</label><input style={S.inp} placeholder="Prénom" value={form.prenom} onChange={e=>setForm(p=>({...p,prenom:e.target.value}))}/></div><div><label style={S.lbl}>Email *</label><input style={S.inp} type="email" placeholder="email@hopital.dz" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))}/></div><div><label style={S.lbl}>Mot de passe *</label><input style={S.inp} type="password" placeholder="Minimum 6 caractères" value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))}/></div><div><label style={S.lbl}>Rôle</label><select style={S.sel} value={form.role} onChange={e=>setForm(p=>({...p,role:e.target.value}))}><option value="TECHNICIEN">Technicien</option><option value="INGENIEUR">Ingénieur Biomédical</option>{jeSuisProprio&&<option value="ADMIN" disabled={nbAdmins>=MAX_ADMINS}>Administrateur adjoint{nbAdmins>=MAX_ADMINS?" (limite atteinte)":""}</option>}</select></div></div><div style={{display:"flex",gap:12,justifyContent:"flex-end"}}><button style={S.btnO} onClick={()=>setShowForm(false)}>Annuler</button><button style={S.btnSolid()} onClick={sauvegarder}>Créer</button></div></div></div>)}
+      {showForm&&(<div style={S.overlay}><div style={S.modal}><h3 style={{marginBottom:20,color:"var(--text)",fontSize:18}}>👤 Nouvel utilisateur</h3><div style={S.fgrid}><div><label style={S.lbl}>Nom *</label><input style={S.inp} placeholder="Nom de famille" value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div><div><label style={S.lbl}>Prénom</label><input style={S.inp} placeholder="Prénom" value={form.prenom} onChange={e=>setForm(p=>({...p,prenom:e.target.value}))}/></div><div><label style={S.lbl}>Email *</label><input style={S.inp} type="email" placeholder="email@hopital.dz" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))}/></div><div><label style={S.lbl}>Mot de passe *</label><input style={S.inp} type="password" placeholder="Minimum 6 caractères" value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))}/></div><div><label style={S.lbl}>Rôle</label><select style={S.sel} value={form.role} onChange={e=>setForm(p=>({...p,role:e.target.value}))}><option value="TECHNICIEN">Technicien</option><option value="INGENIEUR">Ingénieur Biomédical</option>{jeSuisProprio&&<option value="ADMIN" disabled={nbAdmins>=MAX_ADMINS}>Administrateur adjoint{nbAdmins>=MAX_ADMINS?" (limite atteinte)":""}</option>}</select></div></div><div style={{display:"flex",gap:12,justifyContent:"flex-end"}}><button style={S.btnO} onClick={()=>setShowForm(false)}>Annuler</button><button style={S.btnSolid()} onClick={sauvegarder}>Créer</button></div></div></div>)}
     </div>
   );
 });
@@ -1466,8 +1495,8 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
       <AnimatedBackground/>
       <div style={{position:"relative",zIndex:1,textAlign:"center"}}>
         <div style={{fontSize:56,marginBottom:16,filter:"drop-shadow(0 0 20px rgba(0,212,170,0.5))"}}>🏥</div>
-        <div style={{fontSize:20,fontWeight:800,color:"white",letterSpacing:"-0.02em"}}>Chargement...</div>
-        <div style={{fontSize:13,color:"#334155",marginTop:8}}>Connexion à la base de données</div>
+        <div style={{fontSize:20,fontWeight:800,color:"var(--text)",letterSpacing:"-0.02em"}}>Chargement...</div>
+        <div style={{fontSize:13,color:"var(--muted-3)",marginTop:8}}>Connexion à la base de données</div>
       </div>
     </div>
   );
@@ -1484,7 +1513,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
           </div>
         </div>
         <div style={{padding:"14px 20px",borderBottom:"1px solid rgba(0,212,170,0.08)",background:"rgba(0,212,170,0.02)"}}>
-          <div style={{fontSize:13,fontWeight:700,color:"white"}}>{user.prenom} {user.nom}</div>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>{user.prenom} {user.nom}</div>
           <div style={{marginTop:5}}><span style={badge(user.role)}>{user.role}</span></div>
         </div>
         <nav style={{flex:1,paddingTop:8,overflowY:"auto"}}>
@@ -1497,8 +1526,9 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
           ))}
         </nav>
         <div style={{padding:"12px 20px",borderTop:"1px solid rgba(0,212,170,0.08)"}}>
-          <button onClick={onLogout} style={{width:"100%",background:"rgba(255,255,255,0.03)",color:"#475569",border:"1px solid rgba(255,255,255,0.06)",padding:"9px",borderRadius:8,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>🚪 Se déconnecter</button>
-          <div style={{fontSize:9,color:"#1E293B",textAlign:"center",marginTop:8,letterSpacing:"0.05em"}}>v9.0.0 ✅ IA INTÉGRÉE</div>
+          <SelecteurTheme/>
+          <button onClick={onLogout} style={{width:"100%",background:"var(--w03)",color:"var(--muted)",border:"1px solid var(--w06)",padding:"9px",borderRadius:8,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>🚪 Se déconnecter</button>
+          <div style={{fontSize:9,color:"var(--muted-4)",textAlign:"center",marginTop:8,letterSpacing:"0.05em"}}>v9.0.0 ✅ IA INTÉGRÉE</div>
         </div>
       </div>
       <div style={S.main}>
