@@ -898,7 +898,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
           <select style={{...S.sel,maxWidth:320}} value={iotEquipId} onChange={e=>changerEquipMonitoring(parseInt(e.target.value))}>
             {equipements.map(e=><option key={e.id} value={e.id}>{e.nom}</option>)}
           </select>
-          {iotEquipId&&(
+          {iotEquipId&&peutModifier&&(
             <button onClick={()=>{setErreurConfig("");setShowConfigModal(true);}}
               style={{...S.btn("#A78BFA"),marginTop:10,fontSize:12}}>
               ⚙️ Configurer les capteurs
@@ -1243,7 +1243,7 @@ const Alertes = memo(({alertes,equipements,lireAlerte,setOnglet})=>(
   </div>
 ));
 
-const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,reactiverUtilisateur,ajouterUtilisateur,organisation})=>{
+const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,reactiverUtilisateur,ajouterUtilisateur,organisation,changerRole})=>{
   const [showForm,setShowForm]=useState(false);
   const [form,setForm]=useState({nom:"",prenom:"",email:"",password:"",role:"TECHNICIEN"});
   function sauvegarder(){ajouterUtilisateur(form,()=>{setShowForm(false);setForm({nom:"",prenom:"",email:"",password:"",role:"TECHNICIEN"});});}
@@ -1262,7 +1262,7 @@ const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,rea
       <div style={S.card}>
         <table style={S.tbl}>
           <thead><tr>{["Nom","Email","Rôle","Statut","Créé le","Actions"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
-          <tbody>{utilisateurs.map(u=>(<tr key={u.id} style={{opacity:u.actif?1:0.5}}><td style={S.td}><div style={{fontWeight:600,color:"white"}}>{u.prenom} {u.nom}</div></td><td style={{...S.td,color:"#475569"}}>{u.email}</td><td style={S.td}><span style={badge(u.role)}>{u.role}</span></td><td style={S.td}><span style={badge(u.actif?"En service":"En panne")}>{u.actif?"✅ Actif":"❌ Inactif"}</span></td><td style={{...S.td,color:"#334155"}}>{u.createdAt?.split("T")[0]||u.createdAt}</td><td style={S.td}><div style={{display:"flex",gap:6}}>{u.id!==currentUserId&&u.actif===1&&<button onClick={()=>desactiverUtilisateur(u.id)} style={{background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>🚫 Désactiver</button>}{u.actif===0&&<button onClick={()=>reactiverUtilisateur(u.id)} style={{background:"rgba(0,212,170,0.1)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>✅ Réactiver</button>}{u.id===currentUserId&&<span style={{fontSize:11,color:"#334155",fontStyle:"italic"}}>Votre compte</span>}</div></td></tr>))}</tbody>
+          <tbody>{utilisateurs.map(u=>(<tr key={u.id} style={{opacity:u.actif?1:0.5}}><td style={S.td}><div style={{fontWeight:600,color:"white"}}>{u.prenom} {u.nom}</div></td><td style={{...S.td,color:"#475569"}}>{u.email}</td><td style={S.td}>{u.actif===1?<select value={u.role} onChange={e=>changerRole(u,e.target.value)} title="Changer le rôle" style={{...badge(u.role),cursor:"pointer",outline:"none",appearance:"auto"}}><option value="TECHNICIEN">TECHNICIEN</option><option value="INGENIEUR">INGENIEUR</option><option value="ADMIN">ADMIN</option></select>:<span style={badge(u.role)}>{u.role}</span>}</td><td style={S.td}><span style={badge(u.actif?"En service":"En panne")}>{u.actif?"✅ Actif":"❌ Inactif"}</span></td><td style={{...S.td,color:"#334155"}}>{u.createdAt?.split("T")[0]||u.createdAt}</td><td style={S.td}><div style={{display:"flex",gap:6}}>{u.id!==currentUserId&&u.actif===1&&<button onClick={()=>desactiverUtilisateur(u.id)} style={{background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>🚫 Désactiver</button>}{u.actif===0&&<button onClick={()=>reactiverUtilisateur(u.id)} style={{background:"rgba(0,212,170,0.1)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>✅ Réactiver</button>}{u.id===currentUserId&&<span style={{fontSize:11,color:"#334155",fontStyle:"italic"}}>Votre compte</span>}</div></td></tr>))}</tbody>
         </table>
       </div>
       {showForm&&(<div style={S.overlay}><div style={S.modal}><h3 style={{marginBottom:20,color:"white",fontSize:18}}>👤 Nouvel utilisateur</h3><div style={S.fgrid}><div><label style={S.lbl}>Nom *</label><input style={S.inp} placeholder="Nom de famille" value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div><div><label style={S.lbl}>Prénom</label><input style={S.inp} placeholder="Prénom" value={form.prenom} onChange={e=>setForm(p=>({...p,prenom:e.target.value}))}/></div><div><label style={S.lbl}>Email *</label><input style={S.inp} type="email" placeholder="email@hopital.dz" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))}/></div><div><label style={S.lbl}>Mot de passe *</label><input style={S.inp} type="password" placeholder="Minimum 6 caractères" value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))}/></div><div><label style={S.lbl}>Rôle</label><select style={S.sel} value={form.role} onChange={e=>setForm(p=>({...p,role:e.target.value}))}><option value="TECHNICIEN">Technicien</option><option value="INGENIEUR">Ingénieur Biomédical</option><option value="ADMIN">Administrateur</option></select></div></div><div style={{display:"flex",gap:12,justifyContent:"flex-end"}}><button style={S.btnO} onClick={()=>setShowForm(false)}>Annuler</button><button style={S.btnSolid()} onClick={sauvegarder}>Créer</button></div></div></div>)}
@@ -1289,10 +1289,10 @@ export default function App(){
     if(ecran==="inscription") return <PageInscription onLogin={gererConnexion} onRetourConnexion={()=>setEcran("connexion")}/>;
     return <PageConnexion onLogin={gererConnexion} onGoToInscription={()=>setEcran("inscription")}/>;
   }
-  return <Plateforme user={user} token={token} organisation={organisation} prefInitiales={preferences} onLogout={()=>{localStorage.clear();setUser(null);setToken(null);setOrganisation(null);setEcran("connexion");}}/>;
+  return <Plateforme user={user} token={token} organisation={organisation} prefInitiales={preferences} onMajUtilisateur={u=>{setUser(u);localStorage.setItem("user",JSON.stringify(u));}} onLogout={()=>{localStorage.clear();setUser(null);setToken(null);setOrganisation(null);setEcran("connexion");}}/>;
 }
 
-function Plateforme({user,token,organisation,prefInitiales,onLogout}){
+function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisateur}){
   const [onglet,setOnglet]=useState("dashboard");
   const [equipements,setEquipements]=useState([]);
   const [maintenances,setMaintenances]=useState([]);
@@ -1349,13 +1349,13 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout}){
   useEffect(()=>{clearInterval(iotTimerRef.current);if(monitoringActif){chargerIot(iotEquipId);iotTimerRef.current=setInterval(()=>chargerIot(iotEquipId),5000);}return()=>clearInterval(iotTimerRef.current);},[monitoringActif,iotEquipId]);
 
   async function charger(){
-    try{setChargement(true);const h=hdrs();const [r1,r2,r3]=await Promise.all([fetch(`${API}/equipements`,{headers:h}),fetch(`${API}/maintenances`,{headers:h}),fetch(`${API}/alertes`,{headers:h})]);if(r1.status===401){onLogout();return;}setEquipements(await r1.json());setMaintenances(await r2.json());setAlertes(await r3.json());if(user.role==="ADMIN"){const r4=await fetch(`${API}/utilisateurs`,{headers:h});setUtilisateurs(await r4.json());}}catch{toast("❌ Serveur inaccessible","e");}finally{setChargement(false);}
+    try{setChargement(true);const h=hdrs();const [r1,r2,r3]=await Promise.all([fetch(`${API}/equipements`,{headers:h}),fetch(`${API}/maintenances`,{headers:h}),fetch(`${API}/alertes`,{headers:h})]);if(r1.status===401){onLogout();return;}try{const rm=await fetch(`${API}/moi`,{headers:h});if(rm.ok){const moi=await rm.json();if(moi.role&&moi.role!==user.role){onMajUtilisateur({...user,role:moi.role});toast(`ℹ️ Votre rôle a été modifié : ${moi.role}`);}}}catch{}setEquipements(await r1.json());setMaintenances(await r2.json());setAlertes(await r3.json());if(user.role==="ADMIN"){const r4=await fetch(`${API}/utilisateurs`,{headers:h});setUtilisateurs(await r4.json());}}catch{toast("❌ Serveur inaccessible","e");}finally{setChargement(false);}
   }
   async function chargerIot(id){try{const r=await fetch(`${API}/capteurs/${id}`,{headers:hdrs()});if(r.ok){const d=await r.json();if(Array.isArray(d))setIotData(d.reverse());}}catch{}}
   function toast(t,type="s"){setMessage({t,type});setTimeout(()=>setMessage(null),3500);}
   async function toggleMonitoring(){const n=!monitoringActif;setMonitoringActif(n);const p={monitoring_actif:n?1:0,monitoring_equip_id:iotEquipId};localStorage.setItem("preferences",JSON.stringify(p));try{await fetch(`${API}/preferences/monitoring`,{method:"POST",headers:hdrs(),body:JSON.stringify(p)});}catch{}toast(n?"▶️ Monitoring activé":"⏹️ Monitoring désactivé");}
   async function changerEquipMonitoring(id){setIotEquipId(id);const p={monitoring_actif:monitoringActif?1:0,monitoring_equip_id:id};localStorage.setItem("preferences",JSON.stringify(p));try{await fetch(`${API}/preferences/monitoring`,{method:"POST",headers:hdrs(),body:JSON.stringify(p)});}catch{}}
-  async function supprimerEquipement(id){if(!window.confirm("⚠️ Attention : supprimer cet équipement supprimera aussi définitivement toutes ses maintenances, alertes et données IoT associées.\n\nConfirmer la suppression ?")) return;await fetch(`${API}/equipements/${id}`,{method:"DELETE",headers:hdrs()});setEquipements(p=>p.filter(e=>e.id!==id));toast("✅ Équipement supprimé.");}
+  async function supprimerEquipement(id){if(!window.confirm("⚠️ Attention : supprimer cet équipement supprimera aussi définitivement toutes ses maintenances, alertes et données IoT associées.\n\nConfirmer la suppression ?")) return;const rs=await fetch(`${API}/equipements/${id}`,{method:"DELETE",headers:hdrs()});if(!rs.ok){const e=await rs.json().catch(()=>({}));toast("❌ "+(e.erreur||"Suppression impossible"),"e");return;}setEquipements(p=>p.filter(e=>e.id!==id));toast("✅ Équipement supprimé.");}
   async function ajouterMaintenance(form,onSuccess){if(!form.equipementId||!form.datePlanifiee){toast("⚠️ Équipement et date obligatoires.","e");return;}const eq=equipements.find(e=>e.id===parseInt(form.equipementId));try{const r=await fetch(`${API}/maintenances`,{method:"POST",headers:hdrs(),body:JSON.stringify({...form,equipementId:parseInt(form.equipementId),equipementNom:eq?.nom})});const m=await r.json();if(!r.ok){toast("❌ "+(m.erreur||"Erreur"),"e");return;}setMaintenances(p=>[m,...p]);onSuccess();toast("✅ Maintenance planifiée !");rafraichirEnDirect();}catch{toast("❌ Erreur","e");}}
   async function changerStatutMaintenance(m,statut){
     if(statut==="Terminée"&&!window.confirm(`Marquer la maintenance de « ${m.equipementNom} » comme terminée ?\n\nL'équipement repassera « En service » et son score de risque sera recalculé (les pannes et anomalies antérieures ne compteront plus).`)) return;
@@ -1369,7 +1369,8 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout}){
     }catch{toast("❌ Erreur réseau","e");}
   }
   async function ajouterUtilisateur(form,onSuccess){if(!form.nom||!form.email||!form.password){toast("⚠️ Champs obligatoires.","e");return;}try{const r=await fetch(`${API}/utilisateurs`,{method:"POST",headers:hdrs(),body:JSON.stringify(form)});if(!r.ok){const e=await r.json();toast("❌ "+e.erreur,"e");return;}onSuccess();charger();toast("✅ Utilisateur créé !");}catch{toast("❌ Erreur","e");}}
-  async function desactiverUtilisateur(id){if(!window.confirm("Désactiver ?")) return;await fetch(`${API}/utilisateurs/${id}/desactiver`,{method:"PATCH",headers:hdrs()});charger();toast("✅ Désactivé.");}
+  async function desactiverUtilisateur(id){if(!window.confirm("Désactiver ?")) return;const r=await fetch(`${API}/utilisateurs/${id}/desactiver`,{method:"PATCH",headers:hdrs()});if(!r.ok){const e=await r.json().catch(()=>({}));toast("❌ "+(e.erreur||"Erreur"),"e");return;}charger();toast("✅ Désactivé.");}
+  async function changerRole(u,role){if(role===u.role) return;if(!window.confirm(`Changer le rôle de ${u.prenom||""} ${u.nom} : ${u.role} → ${role} ?`)) return;const r=await fetch(`${API}/utilisateurs/${u.id}/role`,{method:"PATCH",headers:hdrs(),body:JSON.stringify({role})});const d=await r.json().catch(()=>({}));if(!r.ok){toast("❌ "+(d.erreur||"Erreur"),"e");charger();return;}setUtilisateurs(p=>p.map(x=>x.id===u.id?{...x,role}:x));toast(`✅ Rôle modifié : ${role}`);if(u.id===user.id){onMajUtilisateur({...user,role});}}
   async function reactiverUtilisateur(id){if(!window.confirm("Réactiver ?")) return;await fetch(`${API}/utilisateurs/${id}/reactiver`,{method:"PATCH",headers:hdrs()});charger();toast("✅ Réactivé !");}
   async function lireAlerte(id){await fetch(`${API}/alertes/${id}/lire`,{method:"PATCH",headers:hdrs()});setAlertes(p=>p.map(a=>a.id===id?{...a,estLue:1}:a));}
 
@@ -1474,7 +1475,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout}){
         {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring} token={token} peutModifier={peutModifier}/>}
         {onglet==="ia"&&<ModuleIA equipements={equipements} token={token} setOnglet={setOnglet}/>}
         {onglet==="alertes"&&<Alertes alertes={alertes} equipements={equipements} lireAlerte={lireAlerte} setOnglet={setOnglet}/>}
-        {onglet==="utilisateurs"&&estAdmin&&estModeOrganisation&&<Utilisateurs utilisateurs={utilisateurs} currentUserId={user.id} desactiverUtilisateur={desactiverUtilisateur} reactiverUtilisateur={reactiverUtilisateur} ajouterUtilisateur={ajouterUtilisateur} organisation={organisation}/>}
+        {onglet==="utilisateurs"&&estAdmin&&estModeOrganisation&&<Utilisateurs utilisateurs={utilisateurs} currentUserId={user.id} desactiverUtilisateur={desactiverUtilisateur} reactiverUtilisateur={reactiverUtilisateur} ajouterUtilisateur={ajouterUtilisateur} organisation={organisation} changerRole={changerRole}/>}
       </div>
     </div>
   );

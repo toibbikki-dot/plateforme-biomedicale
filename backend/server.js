@@ -262,12 +262,19 @@ function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth) return res.status(401).json({ erreur: "Token manquant" });
   const token = auth.split(" ")[1];
+  let jetonDecode;
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
+    jetonDecode = jwt.verify(token, JWT_SECRET);
   } catch {
     return res.status(401).json({ erreur: "Token invalide ou expiré" });
   }
+  // Rôle, organisation et statut actif relus en base : un changement de rôle
+  // ou une désactivation s'applique immédiatement, sans attendre l'expiration du jeton.
+  const actuel = db.prepare("SELECT id, role, organisation_id, actif, nom, prenom, email FROM utilisateurs WHERE id=?").get(jetonDecode.id);
+  if (!actuel) return res.status(401).json({ erreur: "Compte introuvable" });
+  if (!actuel.actif) return res.status(401).json({ erreur: "Compte désactivé par l'administrateur" });
+  req.user = { ...jetonDecode, role: actuel.role, organisation_id: actuel.organisation_id, nom: actuel.nom, prenom: actuel.prenom, email: actuel.email };
+  next();
 }
 
 function requireAdmin(req, res, next) {
@@ -496,7 +503,7 @@ app.get("/api/capteurs/config/:equipementId", authMiddleware, (req, res) => {
   }
 });
 
-app.post("/api/capteurs/config", authMiddleware, (req, res) => {
+app.post("/api/capteurs/config", authMiddleware, requireIngenieur, (req, res) => {
   const b = req.body;
   if (!b.equipement_id) return res.status(400).json({ erreur: "equipement_id est obligatoire" });
   // Cloisonnement : l'équipement doit appartenir à l'organisation de l'utilisateur
@@ -536,7 +543,7 @@ app.get("/api/equipements", (req, res) => {
   catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
-app.post("/api/equipements", (req, res) => {
+app.post("/api/equipements", requireIngenieur, (req, res) => {
   const { nom, marque, numeroSerie, service, statut, dateAcquisition, prochaineMaintenance } = req.body;
   try {
     const result = db.prepare("INSERT INTO equipements (organisation_id,nom,marque,numeroSerie,service,statut,dateAcquisition,prochaineMaintenance,cle_appareil) VALUES (?,?,?,?,?,?,?,?,?)").run(req.user.organisation_id, nom, marque, numeroSerie, service, statut||"En service", dateAcquisition, prochaineMaintenance, genererCleAppareil());
@@ -567,7 +574,7 @@ app.post("/api/equipements/:id/cle", requireIngenieur, (req, res) => {
   } catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
-app.delete("/api/equipements/:id", (req, res) => {
+app.delete("/api/equipements/:id", requireIngenieur, (req, res) => {
   try {
     const id = req.params.id;
     const orgId = req.user.organisation_id;
@@ -683,7 +690,29 @@ app.post("/api/utilisateurs", requireAdmin, (req, res) => {
   }
 });
 
+const ROLES = ["ADMIN", "INGENIEUR", "TECHNICIEN"];
+function nbAdminsActifs(orgId, saufId) {
+  return db.prepare("SELECT COUNT(*) AS n FROM utilisateurs WHERE organisation_id=? AND role='ADMIN' AND actif=1 AND id<>?").get(orgId, saufId || 0).n;
+}
+
+app.patch("/api/utilisateurs/:id/role", requireAdmin, (req, res) => {
+  const { role } = req.body;
+  if (!ROLES.includes(role)) return res.status(400).json({ erreur: "Rôle invalide (ADMIN, INGENIEUR ou TECHNICIEN)" });
+  const cible = db.prepare("SELECT id, role, actif FROM utilisateurs WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id);
+  if (!cible) return res.status(404).json({ erreur: "Utilisateur introuvable dans votre organisation" });
+  if (cible.role === "ADMIN" && role !== "ADMIN" && nbAdminsActifs(req.user.organisation_id, cible.id) === 0)
+    return res.status(400).json({ erreur: "Impossible : l'organisation doit garder au moins un administrateur actif." });
+  try {
+    db.prepare("UPDATE utilisateurs SET role=? WHERE id=?").run(role, cible.id);
+    res.json({ id: cible.id, role });
+  } catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
 app.patch("/api/utilisateurs/:id/desactiver", requireAdmin, (req, res) => {
+  if (String(req.params.id) === String(req.user.id)) return res.status(400).json({ erreur: "Vous ne pouvez pas désactiver votre propre compte." });
+  const cible = db.prepare("SELECT id, role FROM utilisateurs WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id);
+  if (cible && cible.role === "ADMIN" && nbAdminsActifs(req.user.organisation_id, cible.id) === 0)
+    return res.status(400).json({ erreur: "Impossible : l'organisation doit garder au moins un administrateur actif." });
   try { res.json({ misAJour: db.prepare("UPDATE utilisateurs SET actif=0 WHERE id=? AND organisation_id=?").run(req.params.id, req.user.organisation_id).changes > 0 }); }
   catch (err) { res.status(500).json({ erreur: err.message }); }
 });
@@ -691,6 +720,11 @@ app.patch("/api/utilisateurs/:id/desactiver", requireAdmin, (req, res) => {
 app.patch("/api/utilisateurs/:id/reactiver", requireAdmin, (req, res) => {
   try { res.json({ misAJour: db.prepare("UPDATE utilisateurs SET actif=1 WHERE id=? AND organisation_id=?").run(req.params.id, req.user.organisation_id).changes > 0 }); }
   catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
+// Profil courant (rôle à jour, utile si un admin l'a modifié)
+app.get("/api/moi", (req, res) => {
+  res.json({ id: req.user.id, nom: req.user.nom, prenom: req.user.prenom, email: req.user.email, role: req.user.role });
 });
 
 app.get("/api/organisation", (req, res) => {
