@@ -155,6 +155,24 @@ db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_equipements_cle ON equipements(cl
 }
 
 // ════════════════════════════════════════════════════════════
+// MIGRATION — Seuils min/max par capteur + indicateur d'anomalie
+// (colonnes ajoutées sans toucher aux données existantes)
+// ════════════════════════════════════════════════════════════
+{
+  const colsCapteurs = db.prepare("PRAGMA table_info(equipement_capteurs)").all().map(c => c.name);
+  let ajoutees = 0;
+  for (let i = 1; i <= 8; i++) {
+    for (const suffixe of ["min", "max"]) {
+      const col = `param${i}_${suffixe}`;
+      if (!colsCapteurs.includes(col)) { db.exec(`ALTER TABLE equipement_capteurs ADD COLUMN ${col} REAL`); ajoutees++; }
+    }
+  }
+  const colsIot = db.prepare("PRAGMA table_info(iot_data)").all().map(c => c.name);
+  if (!colsIot.includes("anomalie")) { db.exec("ALTER TABLE iot_data ADD COLUMN anomalie INTEGER DEFAULT 0"); ajoutees++; }
+  if (ajoutees) console.log(`✅ ${ajoutees} colonne(s) de seuils/anomalie ajoutée(s)`);
+}
+
+// ════════════════════════════════════════════════════════════
 // UTILITAIRES
 // ════════════════════════════════════════════════════════════
 function genererCleAppareil() {
@@ -284,10 +302,54 @@ app.post("/api/auth/login", (req, res) => {
 // ════════════════════════════════════════════════════════════
 // IOT — Réception ESP32 (authentifié par la clé d'appareil)
 // L'ESP32 envoie sa clé dans l'en-tête "X-Device-Key".
-// Le serveur retrouve lui-même l'organisation et l'équipement.
+// Le serveur retrouve lui-même l'organisation et l'équipement,
+// compare chaque mesure aux seuils configurés sur la plateforme,
+// et renvoie ces seuils à l'ESP32 (seuils_txt) pour qu'il les applique.
 // ════════════════════════════════════════════════════════════
 const chercherEquipParCle = db.prepare("SELECT id, organisation_id, statut FROM equipements WHERE cle_appareil=?");
-const dernierePanne = db.prepare("SELECT panne FROM iot_data WHERE equipement_id=? ORDER BY id DESC LIMIT 1");
+const dernierEtatIot = db.prepare("SELECT panne, anomalie FROM iot_data WHERE equipement_id=? ORDER BY id DESC LIMIT 1");
+const chercherConfigCapteurs = db.prepare("SELECT * FROM equipement_capteurs WHERE equipement_id=?");
+
+const NOMS_PAR_DEFAUT = ['Température', 'Vibration', 'Paramètre 3', 'Paramètre 4', 'Paramètre 5', 'Paramètre 6', 'Paramètre 7', 'Paramètre 8'];
+
+// Nombre (fini) ou null : une case vide = pas de seuil de ce côté
+function nombreOuNull(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = parseFloat(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+function formater(v) {
+  return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
+}
+
+// Liste des mesures hors seuils pour les capteurs actifs
+function evaluerSeuils(config, params) {
+  const nb = Math.min(8, Math.max(2, (config && config.nb_capteurs_actifs) || 2));
+  const depassements = [];
+  for (let i = 1; i <= nb; i++) {
+    const valeur = params[i - 1];
+    if (valeur === null || !config) continue;
+    const min = config[`param${i}_min`], max = config[`param${i}_max`];
+    const nom = config[`param${i}_nom`] || NOMS_PAR_DEFAUT[i - 1];
+    const unite = config[`param${i}_unite`] || "";
+    if (max !== null && max !== undefined && valeur > max) depassements.push(`${nom} au-dessus du seuil : ${formater(valeur)} ${unite} (max ${formater(max)})`.replace(/\s+/g, " "));
+    else if (min !== null && min !== undefined && valeur < min) depassements.push(`${nom} en dessous du seuil : ${formater(valeur)} ${unite} (min ${formater(min)})`.replace(/\s+/g, " "));
+  }
+  return depassements;
+}
+
+// Format compact lu par l'ESP32 : "min1,max1;min2,max2;..." (vide = pas de seuil)
+function seuilsTexte(config) {
+  const nb = Math.min(8, Math.max(2, (config && config.nb_capteurs_actifs) || 2));
+  const morceaux = [];
+  for (let i = 1; i <= nb; i++) {
+    const min = config ? config[`param${i}_min`] : null;
+    const max = config ? config[`param${i}_max`] : null;
+    morceaux.push(`${min ?? ""},${max ?? ""}`);
+  }
+  return morceaux.join(";");
+}
 
 app.post("/api/capteurs", (req, res) => {
   const cle = req.headers["x-device-key"] || req.body.cle_appareil;
@@ -296,19 +358,20 @@ app.post("/api/capteurs", (req, res) => {
   if (!equip) return res.status(401).json({ erreur: "Clé d'appareil invalide" });
 
   const { etat, panne } = req.body;
-  const params = [1, 2, 3, 4, 5, 6, 7, 8].map(i => {
-    const v = parseFloat(req.body[`param${i}`]);
-    return Number.isFinite(v) ? v : null;
-  });
+  const params = [1, 2, 3, 4, 5, 6, 7, 8].map(i => nombreOuNull(req.body[`param${i}`]));
   const enPanne = !!panne;
+  const config = chercherConfigCapteurs.get(equip.id);
+  const depassements = evaluerSeuils(config, params);
+  const enAnomalie = depassements.length > 0;
 
   try {
     const enregistrer = db.transaction(() => {
-      const precedent = dernierePanne.get(equip.id);
+      const precedent = dernierEtatIot.get(equip.id);
       const etaitEnPanne = !!(precedent && precedent.panne);
+      const etaitEnAnomalie = !!(precedent && precedent.anomalie);
 
-      db.prepare("INSERT INTO iot_data (organisation_id,equipement_id,etat,panne,param1,param2,param3,param4,param5,param6,param7,param8,timestamp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now','localtime'))")
-        .run(equip.organisation_id, equip.id, etat ? 1 : 0, enPanne ? 1 : 0, ...params);
+      db.prepare("INSERT INTO iot_data (organisation_id,equipement_id,etat,panne,anomalie,param1,param2,param3,param4,param5,param6,param7,param8,timestamp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now','localtime'))")
+        .run(equip.organisation_id, equip.id, etat ? 1 : 0, enPanne ? 1 : 0, enAnomalie ? 1 : 0, ...params);
 
       // Nouvelle panne : une seule alerte au moment où elle apparaît
       // (et non une alerte toutes les 5 secondes tant qu'elle dure)
@@ -322,9 +385,27 @@ app.post("/api/capteurs", (req, res) => {
         db.prepare("INSERT INTO alertes (organisation_id,equipement_id,type,severite,message,source) VALUES (?,?,'RESOLUTION','INFO','Panne résolue (signalée par capteur)','IOT')").run(equip.organisation_id, equip.id);
         db.prepare("UPDATE equipements SET statut='En service' WHERE id=?").run(equip.id);
       }
+
+      // Nouvelle anomalie (valeur hors seuils) : une seule alerte au début
+      if (enAnomalie && !etaitEnAnomalie) {
+        db.prepare("INSERT INTO alertes (organisation_id,equipement_id,type,severite,message,source) VALUES (?,?,'ANOMALIE','MOYENNE',?,'IOT')").run(equip.organisation_id, equip.id, "Valeur hors seuil — " + depassements.join(" ; "));
+        db.prepare("UPDATE equipements SET scoreRisque=MIN(100,scoreRisque+5) WHERE id=?").run(equip.id);
+      }
+
+      // Toutes les valeurs sont revenues dans leurs seuils
+      if (!enAnomalie && etaitEnAnomalie) {
+        db.prepare("INSERT INTO alertes (organisation_id,equipement_id,type,severite,message,source) VALUES (?,?,'RETOUR_NORMAL','INFO','Toutes les mesures sont revenues dans leurs seuils','IOT')").run(equip.organisation_id, equip.id);
+      }
     });
     enregistrer();
-    res.json({ message: "Données IoT reçues", equipement_id: equip.id, timestamp: new Date() });
+    res.json({
+      message: "Données IoT reçues",
+      equipement_id: equip.id,
+      anomalie: enAnomalie,
+      depassements,
+      seuils_txt: seuilsTexte(config),
+      timestamp: new Date()
+    });
   } catch (err) {
     res.status(500).json({ erreur: err.message });
   }
@@ -332,24 +413,20 @@ app.post("/api/capteurs", (req, res) => {
 
 // ════════════════════════════════════════════════════════════
 // CONFIGURATION CAPTEURS (avant middleware global)
+// Noms, unités et seuils min/max de 2 à 8 capteurs par équipement
 // ════════════════════════════════════════════════════════════
 app.get("/api/capteurs/config/:equipementId", authMiddleware, (req, res) => {
   try {
     const config = db.prepare("SELECT * FROM equipement_capteurs WHERE equipement_id=? AND organisation_id=?").get(req.params.equipementId, req.user.organisation_id);
     if (!config) {
-      return res.json({
-        equipement_id: parseInt(req.params.equipementId),
-        organisation_id: req.user.organisation_id,
-        nb_capteurs_actifs: 2,
-        param1_nom:'Température', param1_unite:'°C',
-        param2_nom:'Vibration',   param2_unite:'g',
-        param3_nom:'Paramètre 3', param3_unite:'',
-        param4_nom:'Paramètre 4', param4_unite:'',
-        param5_nom:'Paramètre 5', param5_unite:'',
-        param6_nom:'Paramètre 6', param6_unite:'',
-        param7_nom:'Paramètre 7', param7_unite:'',
-        param8_nom:'Paramètre 8', param8_unite:'',
-      });
+      const parDefaut = { equipement_id: parseInt(req.params.equipementId), organisation_id: req.user.organisation_id, nb_capteurs_actifs: 2 };
+      for (let i = 1; i <= 8; i++) {
+        parDefaut[`param${i}_nom`] = NOMS_PAR_DEFAUT[i - 1];
+        parDefaut[`param${i}_unite`] = i === 1 ? '°C' : i === 2 ? 'g' : '';
+        parDefaut[`param${i}_min`] = null;
+        parDefaut[`param${i}_max`] = null;
+      }
+      return res.json(parDefaut);
     }
     res.json(config);
   } catch (err) {
@@ -357,43 +434,29 @@ app.get("/api/capteurs/config/:equipementId", authMiddleware, (req, res) => {
   }
 });
 
-// ✅ CORRECTION : 19 colonnes = 19 valeurs dans le .run()
 app.post("/api/capteurs/config", authMiddleware, (req, res) => {
-  const { equipement_id, nb_capteurs_actifs, param1_nom, param1_unite, param2_nom, param2_unite, param3_nom, param3_unite, param4_nom, param4_unite, param5_nom, param5_unite, param6_nom, param6_unite, param7_nom, param7_unite, param8_nom, param8_unite } = req.body;
-  if (!equipement_id) return res.status(400).json({ erreur: "equipement_id est obligatoire" });
+  const b = req.body;
+  if (!b.equipement_id) return res.status(400).json({ erreur: "equipement_id est obligatoire" });
   // Cloisonnement : l'équipement doit appartenir à l'organisation de l'utilisateur
-  const equipOk = db.prepare("SELECT id FROM equipements WHERE id=? AND organisation_id=?").get(equipement_id, req.user.organisation_id);
+  const equipOk = db.prepare("SELECT id FROM equipements WHERE id=? AND organisation_id=?").get(b.equipement_id, req.user.organisation_id);
   if (!equipOk) return res.status(404).json({ erreur: "Équipement introuvable dans votre organisation. Sélectionnez un équipement dans la liste." });
+
+  const nb = Math.min(8, Math.max(2, parseInt(b.nb_capteurs_actifs) || 2));
+  const colonnes = ["equipement_id", "organisation_id", "nb_capteurs_actifs"];
+  const valeurs = [b.equipement_id, req.user.organisation_id, nb];
+  for (let i = 1; i <= 8; i++) {
+    const min = nombreOuNull(b[`param${i}_min`]);
+    const max = nombreOuNull(b[`param${i}_max`]);
+    const nom = b[`param${i}_nom`] || NOMS_PAR_DEFAUT[i - 1];
+    if (i <= nb && min !== null && max !== null && min > max) {
+      return res.status(400).json({ erreur: `Capteur ${i} (${nom}) : le seuil min (${min}) est supérieur au seuil max (${max}).` });
+    }
+    colonnes.push(`param${i}_nom`, `param${i}_unite`, `param${i}_min`, `param${i}_max`);
+    valeurs.push(nom, b[`param${i}_unite`] ?? (i === 1 ? '°C' : i === 2 ? 'g' : ''), min, max);
+  }
+  const majs = colonnes.filter(c => c !== "equipement_id" && c !== "organisation_id").map(c => `${c}=excluded.${c}`).join(", ");
   try {
-    const result = db.prepare(`
-      INSERT INTO equipement_capteurs (
-        equipement_id, organisation_id, nb_capteurs_actifs,
-        param1_nom, param1_unite, param2_nom, param2_unite,
-        param3_nom, param3_unite, param4_nom, param4_unite,
-        param5_nom, param5_unite, param6_nom, param6_unite,
-        param7_nom, param7_unite, param8_nom, param8_unite
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-      ON CONFLICT(equipement_id) DO UPDATE SET
-        nb_capteurs_actifs=excluded.nb_capteurs_actifs,
-        param1_nom=excluded.param1_nom, param1_unite=excluded.param1_unite,
-        param2_nom=excluded.param2_nom, param2_unite=excluded.param2_unite,
-        param3_nom=excluded.param3_nom, param3_unite=excluded.param3_unite,
-        param4_nom=excluded.param4_nom, param4_unite=excluded.param4_unite,
-        param5_nom=excluded.param5_nom, param5_unite=excluded.param5_unite,
-        param6_nom=excluded.param6_nom, param6_unite=excluded.param6_unite,
-        param7_nom=excluded.param7_nom, param7_unite=excluded.param7_unite,
-        param8_nom=excluded.param8_nom, param8_unite=excluded.param8_unite
-    `).run(
-      equipement_id, req.user.organisation_id, nb_capteurs_actifs||2,
-      param1_nom||'Température', param1_unite||'°C',
-      param2_nom||'Vibration',   param2_unite||'g',
-      param3_nom||'Paramètre 3', param3_unite||'',
-      param4_nom||'Paramètre 4', param4_unite||'',
-      param5_nom||'Paramètre 5', param5_unite||'',
-      param6_nom||'Paramètre 6', param6_unite||'',
-      param7_nom||'Paramètre 7', param7_unite||'',
-      param8_nom||'Paramètre 8', param8_unite||''
-    );
+    const result = db.prepare(`INSERT INTO equipement_capteurs (${colonnes.join(",")}) VALUES (${colonnes.map(() => "?").join(",")}) ON CONFLICT(equipement_id) DO UPDATE SET ${majs}`).run(...valeurs);
     res.json({ message: "Configuration sauvegardée", id: result.lastInsertRowid });
   } catch (err) {
     console.error("❌ Erreur config capteurs:", err);

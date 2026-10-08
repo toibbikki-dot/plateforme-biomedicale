@@ -672,6 +672,58 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
   </div>
 ));
 
+// ── IoT : configuration des capteurs et seuils ─────────────
+const NOMS_CAPTEURS_DEFAUT=['Température','Vibration','Paramètre 3','Paramètre 4','Paramètre 5','Paramètre 6','Paramètre 7','Paramètre 8'];
+
+// Formulaire de configuration (les seuils sont gardés en texte : "" = pas de seuil)
+function formDepuisConfig(config){
+  const f={nb_capteurs_actifs:config?.nb_capteurs_actifs||2};
+  for(let i=1;i<=8;i++){
+    f[`param${i}_nom`]=config?.[`param${i}_nom`]||NOMS_CAPTEURS_DEFAUT[i-1];
+    f[`param${i}_unite`]=config?.[`param${i}_unite`]??(i===1?'°C':i===2?'g':'');
+    f[`param${i}_min`]=config?.[`param${i}_min`]??'';
+    f[`param${i}_max`]=config?.[`param${i}_max`]??'';
+  }
+  return f;
+}
+
+const aSeuil=v=>v!==null&&v!==undefined&&v!=='';
+const fmtSeuil=v=>Number.isInteger(Number(v))?String(v):Number(v).toFixed(2);
+
+// État d'un capteur par rapport à ses seuils : null (normal / pas de mesure), "haut" ou "bas"
+function etatSeuil(config,idx,valeur){
+  if(!config||valeur===null||valeur===undefined||isNaN(valeur)) return null;
+  const min=config[`param${idx}_min`],max=config[`param${idx}_max`];
+  if(aSeuil(max)&&valeur>Number(max)) return "haut";
+  if(aSeuil(min)&&valeur<Number(min)) return "bas";
+  return null;
+}
+
+// Liste lisible des dépassements pour la dernière mesure
+function depassementsSeuils(config,mesure){
+  if(!config||!mesure) return [];
+  const liste=[];
+  for(let idx=1;idx<=(config.nb_capteurs_actifs||2);idx++){
+    const v=parseFloat(mesure[`param${idx}`]);
+    const sens=etatSeuil(config,idx,v);
+    if(!sens) continue;
+    const nom=config[`param${idx}_nom`]||NOMS_CAPTEURS_DEFAUT[idx-1];
+    const unite=config[`param${idx}_unite`]||'';
+    const seuil=sens==="haut"?config[`param${idx}_max`]:config[`param${idx}_min`];
+    liste.push(`${nom} ${sens==="haut"?"au-dessus du seuil":"en dessous du seuil"} : ${v.toFixed(2)} ${unite} (${sens==="haut"?"max":"min"} ${fmtSeuil(seuil)})`);
+  }
+  return liste;
+}
+
+function texteSeuils(config,idx){
+  if(!config) return "";
+  const min=config[`param${idx}_min`],max=config[`param${idx}_max`],u=config[`param${idx}_unite`]||'';
+  if(aSeuil(min)&&aSeuil(max)) return `Plage normale : ${fmtSeuil(min)} à ${fmtSeuil(max)} ${u}`;
+  if(aSeuil(max)) return `Seuil max : ${fmtSeuil(max)} ${u}`;
+  if(aSeuil(min)) return `Seuil min : ${fmtSeuil(min)} ${u}`;
+  return "Aucun seuil configuré";
+}
+
 const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitoring,changerEquipMonitoring,token,peutModifier})=>{
   const [capteursConfig,setCapteursConfig]=useState(null);
   const [cleAppareil,setCleAppareil]=useState(null);
@@ -692,17 +744,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
     try{await navigator.clipboard.writeText(cleAppareil);setCleCopiee(true);setTimeout(()=>setCleCopiee(false),2500);}catch{setErreurCle("Copie impossible : sélectionnez la clé et faites Ctrl + C.");}
   }
   const [showConfigModal,setShowConfigModal]=useState(false);
-  const [configForm,setConfigForm]=useState({
-    nb_capteurs_actifs:2,
-    param1_nom:'Température',param1_unite:'°C',
-    param2_nom:'Vibration',param2_unite:'g',
-    param3_nom:'Paramètre 3',param3_unite:'',
-    param4_nom:'Paramètre 4',param4_unite:'',
-    param5_nom:'Paramètre 5',param5_unite:'',
-    param6_nom:'Paramètre 6',param6_unite:'',
-    param7_nom:'Paramètre 7',param7_unite:'',
-    param8_nom:'Paramètre 8',param8_unite:'',
-  });
+  const [configForm,setConfigForm]=useState(()=>formDepuisConfig(null));
   const [erreurConfig,setErreurConfig]=useState("");
   const [sauvegarde,setSauvegarde]=useState(false);
 
@@ -720,17 +762,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
       if(r.ok){
         const config=await r.json();
         setCapteursConfig(config);
-        setConfigForm({
-          nb_capteurs_actifs:config.nb_capteurs_actifs||2,
-          param1_nom:config.param1_nom||'Température',param1_unite:config.param1_unite||'°C',
-          param2_nom:config.param2_nom||'Vibration',param2_unite:config.param2_unite||'g',
-          param3_nom:config.param3_nom||'Paramètre 3',param3_unite:config.param3_unite||'',
-          param4_nom:config.param4_nom||'Paramètre 4',param4_unite:config.param4_unite||'',
-          param5_nom:config.param5_nom||'Paramètre 5',param5_unite:config.param5_unite||'',
-          param6_nom:config.param6_nom||'Paramètre 6',param6_unite:config.param6_unite||'',
-          param7_nom:config.param7_nom||'Paramètre 7',param7_unite:config.param7_unite||'',
-          param8_nom:config.param8_nom||'Paramètre 8',param8_unite:config.param8_unite||'',
-        });
+        setConfigForm(formDepuisConfig(config));
       }
     }catch(err){console.error("Erreur config:",err);}
   }
@@ -786,23 +818,46 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
                 style={{...S.inp,maxWidth:100}}
               />
             </div>
+            <div style={{fontSize:12,color:"#64748B",marginBottom:14,lineHeight:1.6}}>
+              Seuils : laissez une case vide pour ne pas fixer de limite de ce côté.
+              Une mesure en dehors de la plage déclenche une alerte « Anomalie », et les seuils sont envoyés automatiquement à l'ESP32.
+            </div>
             {[...Array(configForm.nb_capteurs_actifs)].map((_,i)=>{
               const idx=i+1;
               return(
-                <div key={idx} style={{...S.fgrid,marginBottom:12}}>
-                  <div>
-                    <label style={S.lbl}>Capteur {idx} — Nom</label>
-                    <input style={S.inp} value={configForm[`param${idx}_nom`]}
-                      onChange={e=>setConfigForm(p=>({...p,[`param${idx}_nom`]:e.target.value}))}
-                      placeholder={`Paramètre ${idx}`}
-                    />
+                <div key={idx} style={{border:"1px solid rgba(255,255,255,0.06)",borderRadius:10,padding:"14px 14px 2px",marginBottom:12}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#A78BFA",marginBottom:10}}>Capteur {idx} — param{idx}</div>
+                  <div style={{...S.fgrid,marginBottom:12}}>
+                    <div>
+                      <label style={S.lbl}>Nom</label>
+                      <input style={S.inp} value={configForm[`param${idx}_nom`]}
+                        onChange={e=>setConfigForm(p=>({...p,[`param${idx}_nom`]:e.target.value}))}
+                        placeholder={`Paramètre ${idx}`}
+                      />
+                    </div>
+                    <div>
+                      <label style={S.lbl}>Unité</label>
+                      <input style={S.inp} value={configForm[`param${idx}_unite`]}
+                        onChange={e=>setConfigForm(p=>({...p,[`param${idx}_unite`]:e.target.value}))}
+                        placeholder="Ex: °C, g, bar..."
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label style={S.lbl}>Unité</label>
-                    <input style={S.inp} value={configForm[`param${idx}_unite`]}
-                      onChange={e=>setConfigForm(p=>({...p,[`param${idx}_unite`]:e.target.value}))}
-                      placeholder="Ex: °C, g, bar..."
-                    />
+                  <div style={{...S.fgrid,marginBottom:12}}>
+                    <div>
+                      <label style={S.lbl}>Seuil min</label>
+                      <input style={S.inp} type="number" step="any" value={configForm[`param${idx}_min`]}
+                        onChange={e=>setConfigForm(p=>({...p,[`param${idx}_min`]:e.target.value}))}
+                        placeholder="Aucun"
+                      />
+                    </div>
+                    <div>
+                      <label style={S.lbl}>Seuil max</label>
+                      <input style={S.inp} type="number" step="any" value={configForm[`param${idx}_max`]}
+                        onChange={e=>setConfigForm(p=>({...p,[`param${idx}_max`]:e.target.value}))}
+                        placeholder="Aucun"
+                      />
+                    </div>
                   </div>
                 </div>
               );
@@ -885,16 +940,32 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
               <div style={{fontSize:28,fontWeight:900,color:dernier?.panne?"#FF4D6D":"#00D4AA",marginTop:4}}>{dernier?.panne?"OUI":"NON"}</div>
               <div style={{fontSize:12,color:"#475569",marginTop:4}}>Panne</div>
             </div>
+            {(()=>{
+              const alertes=depassementsSeuils(capteursConfig,dernier);
+              const enAlerte=alertes.length>0;
+              const c=!dernier?"#475569":enAlerte?"#F59E0B":"#00D4AA";
+              return(
+                <div style={{background:`${c}14`,border:`1px solid ${c}40`,borderRadius:12,padding:20,textAlign:"center",boxShadow:enAlerte?`0 0 18px ${c}30`:"none"}}>
+                  <div style={{fontSize:32}}>{!dernier?"⏳":enAlerte?"⚠️":"✅"}</div>
+                  <div style={{fontSize:24,fontWeight:900,color:c,marginTop:4}}>{!dernier?"--":enAlerte?"ALERTE":"NORMAL"}</div>
+                  <div style={{fontSize:12,color:"#475569",marginTop:4}}>Seuils</div>
+                  {enAlerte&&<div style={{fontSize:11,color:"#F59E0B",marginTop:8,lineHeight:1.5,textAlign:"left"}}>{alertes.map((a,k)=><div key={k}>• {a}</div>)}</div>}
+                </div>
+              );
+            })()}
             {capteursConfig&&[...Array(capteursConfig.nb_capteurs_actifs||2)].map((_,i)=>{
               const idx=i+1;
               const nom=capteursConfig[`param${idx}_nom`]||`Paramètre ${idx}`;
               const unite=capteursConfig[`param${idx}_unite`]||'';
               const val=dernier?parseFloat(dernier[`param${idx}`]):null;
+              const sens=etatSeuil(capteursConfig,idx,val);
+              const c=sens?"#F59E0B":null;
               return(
-                <div key={idx} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,padding:20,textAlign:"center"}}>
-                  <div style={{fontSize:32}}>📊</div>
-                  <div style={{fontSize:24,fontWeight:900,color:"white",marginTop:4}}>{val!==null&&!isNaN(val)?val.toFixed(2):"--"}</div>
+                <div key={idx} style={{background:c?`${c}14`:"rgba(255,255,255,0.03)",border:`1px solid ${c?`${c}50`:"rgba(255,255,255,0.06)"}`,borderRadius:12,padding:20,textAlign:"center"}}>
+                  <div style={{fontSize:32}}>{sens==="haut"?"🔺":sens==="bas"?"🔻":"📊"}</div>
+                  <div style={{fontSize:24,fontWeight:900,color:c||"white",marginTop:4}}>{val!==null&&!isNaN(val)?val.toFixed(2):"--"}</div>
                   <div style={{fontSize:12,color:"#475569",marginTop:4}}>{nom} {unite&&`(${unite})`}</div>
+                  <div style={{fontSize:10,color:c||"#334155",marginTop:6}}>{texteSeuils(capteursConfig,idx)}</div>
                 </div>
               );
             })}
@@ -945,6 +1016,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
                   const idx=i+1;
                   return <th key={idx} style={S.th}>{capteursConfig[`param${idx}_nom`]||`Param ${idx}`} {capteursConfig[`param${idx}_unite`]&&`(${capteursConfig[`param${idx}_unite`]})`}</th>;
                 })}
+                <th style={S.th}>Seuils</th>
                 <th style={S.th}>État</th>
                 <th style={S.th}>Panne</th>
               </tr>
@@ -956,8 +1028,10 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
                   {capteursConfig&&[...Array(capteursConfig.nb_capteurs_actifs||2)].map((_,j)=>{
                     const idx=j+1;
                     const val=d[`param${idx}`];
-                    return <td key={idx} style={S.td}><span style={{color:"white",fontWeight:700}}>{val!==null&&val!==undefined?parseFloat(val).toFixed(2):"--"}</span></td>;
+                    const hors=etatSeuil(capteursConfig,idx,parseFloat(val));
+                    return <td key={idx} style={S.td}><span style={{color:hors?"#F59E0B":"white",fontWeight:700}}>{val!==null&&val!==undefined?parseFloat(val).toFixed(2):"--"}{hors==="haut"?" 🔺":hors==="bas"?" 🔻":""}</span></td>;
                   })}
+                  <td style={S.td}>{depassementsSeuils(capteursConfig,d).length>0?<span style={{color:"#F59E0B"}}>⚠️ Alerte</span>:"✅ Normal"}</td>
                   <td style={S.td}>{d.etat==1?"⚡ Actif":"💤 Inactif"}</td>
                   <td style={S.td}>{d.panne?"🔴 Oui":"✅ Non"}</td>
                 </tr>
