@@ -185,6 +185,23 @@ db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_equipements_cle ON equipements(cl
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_org_code_ingenieur ON organisations(code_ingenieur)");
 }
+// ════════════════════════════════════════════════════════════
+// MIGRATION — Propriétaire de l'organisation (le créateur)
+// ════════════════════════════════════════════════════════════
+{
+  const colsOrg = db.prepare("PRAGMA table_info(organisations)").all().map(c => c.name);
+  if (!colsOrg.includes("proprietaire_id")) {
+    db.exec("ALTER TABLE organisations ADD COLUMN proprietaire_id INTEGER");
+    console.log("✅ Colonne proprietaire_id ajoutée");
+  }
+}
+// Propriétaire = premier administrateur créé dans l'organisation
+function completerProprietaires() {
+  return db.prepare(`UPDATE organisations SET proprietaire_id =
+      (SELECT MIN(id) FROM utilisateurs u WHERE u.organisation_id = organisations.id AND u.role = 'ADMIN')
+    WHERE proprietaire_id IS NULL`).run().changes;
+}
+
 function completerCodesIngenieur() {
   const orgs = db.prepare("SELECT id FROM organisations WHERE type='ORGANISATION' AND code_ingenieur IS NULL").all();
   for (const o of orgs) db.prepare("UPDATE organisations SET code_ingenieur=? WHERE id=?").run(genererCodeInvitation(), o.id);
@@ -321,6 +338,7 @@ app.post("/api/auth/inscription", (req, res) => {
     if (mode === "INDIVIDUEL") {
       const orgId = db.prepare("INSERT INTO organisations (nom, type) VALUES (?, 'INDIVIDUEL')").run(`Espace de ${prenom || nom}`).lastInsertRowid;
       const userId = db.prepare("INSERT INTO utilisateurs (organisation_id, nom, prenom, email, password, role) VALUES (?,?,?,?,?,'ADMIN')").run(orgId, nom, prenom || " ", email, hash).lastInsertRowid;
+      db.prepare("UPDATE organisations SET proprietaire_id=? WHERE id=?").run(userId, orgId);
       return creerSessionEtRepondre(userId, res);
     }
 
@@ -330,6 +348,7 @@ app.post("/api/auth/inscription", (req, res) => {
       const codeIngenieur = genererCodeInvitation();
       const orgId = db.prepare("INSERT INTO organisations (nom, type, code_invitation, code_ingenieur) VALUES (?, 'ORGANISATION', ?, ?)").run(nomOrganisation, code, codeIngenieur).lastInsertRowid;
       const userId = db.prepare("INSERT INTO utilisateurs (organisation_id, nom, prenom, email, password, role) VALUES (?,?,?,?,?,'ADMIN')").run(orgId, nom, prenom || " ", email, hash).lastInsertRowid;
+      db.prepare("UPDATE organisations SET proprietaire_id=? WHERE id=?").run(userId, orgId);
       return creerSessionEtRepondre(userId, res, { codeGenere: code, codeIngenieur });
     }
 
@@ -700,16 +719,25 @@ app.post("/api/preferences/monitoring", (req, res) => {
 });
 
 app.get("/api/utilisateurs", requireAdmin, (req, res) => {
-  try { res.json(db.prepare("SELECT id,nom,prenom,email,role,actif,createdAt FROM utilisateurs WHERE organisation_id=? ORDER BY id").all(req.user.organisation_id)); }
+  try {
+    const proprio = proprietaireId(req.user.organisation_id);
+    res.json(db.prepare("SELECT id,nom,prenom,email,role,actif,createdAt FROM utilisateurs WHERE organisation_id=? ORDER BY id").all(req.user.organisation_id)
+      .map(u => ({ ...u, est_proprietaire: u.id === proprio })));
+  }
   catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
 app.post("/api/utilisateurs", requireAdmin, (req, res) => {
   const { nom, prenom, email, password, role } = req.body;
   if (!nom || !email || !password) return res.status(400).json({ erreur: "Champs obligatoires manquants" });
+  const roleFinal = ROLES.includes(role) ? role : "TECHNICIEN";
+  if (roleFinal === "ADMIN") {
+    if (!estProprietaire(req)) return res.status(403).json({ erreur: MSG_PROPRIO });
+    if (nbAdminsActifs(req.user.organisation_id) >= MAX_ADMINS) return res.status(400).json({ erreur: MSG_LIMITE });
+  }
   try {
-    const result = db.prepare("INSERT INTO utilisateurs (organisation_id,nom,prenom,email,password,role) VALUES (?,?,?,?,?,?)").run(req.user.organisation_id, nom, prenom||" ", email, bcrypt.hashSync(password,10), role||"TECHNICIEN");
-    res.json({ id: result.lastInsertRowid, nom, prenom, email, role });
+    const result = db.prepare("INSERT INTO utilisateurs (organisation_id,nom,prenom,email,password,role) VALUES (?,?,?,?,?,?)").run(req.user.organisation_id, nom, prenom||" ", email, bcrypt.hashSync(password,10), roleFinal);
+    res.json({ id: result.lastInsertRowid, nom, prenom, email, role: roleFinal });
   } catch (err) {
     if (err.message.includes("UNIQUE")) return res.status(409).json({ erreur: "Cet email est déjà utilisé" });
     res.status(500).json({ erreur: err.message });
@@ -717,17 +745,32 @@ app.post("/api/utilisateurs", requireAdmin, (req, res) => {
 });
 
 const ROLES = ["ADMIN", "INGENIEUR", "TECHNICIEN"];
+const MAX_ADMINS = 3;   // le propriétaire + 2 administrateurs adjoints
+
+function proprietaireId(orgId) {
+  const o = db.prepare("SELECT proprietaire_id FROM organisations WHERE id=?").get(orgId);
+  return o ? o.proprietaire_id : null;
+}
+function estProprietaire(req) {
+  return proprietaireId(req.user.organisation_id) === req.user.id;
+}
 function nbAdminsActifs(orgId, saufId) {
   return db.prepare("SELECT COUNT(*) AS n FROM utilisateurs WHERE organisation_id=? AND role='ADMIN' AND actif=1 AND id<>?").get(orgId, saufId || 0).n;
 }
+const MSG_PROPRIO = "Seul le propriétaire de l'organisation peut nommer, retirer ou désactiver un administrateur.";
+const MSG_LIMITE = `Limite atteinte : ${MAX_ADMINS} administrateurs au maximum (le propriétaire et ${MAX_ADMINS - 1} adjoints).`;
 
 app.patch("/api/utilisateurs/:id/role", requireAdmin, (req, res) => {
   const { role } = req.body;
   if (!ROLES.includes(role)) return res.status(400).json({ erreur: "Rôle invalide (ADMIN, INGENIEUR ou TECHNICIEN)" });
   const cible = db.prepare("SELECT id, role, actif FROM utilisateurs WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id);
   if (!cible) return res.status(404).json({ erreur: "Utilisateur introuvable dans votre organisation" });
-  if (cible.role === "ADMIN" && role !== "ADMIN" && nbAdminsActifs(req.user.organisation_id, cible.id) === 0)
-    return res.status(400).json({ erreur: "Impossible : l'organisation doit garder au moins un administrateur actif." });
+  if (cible.role === role) return res.json({ id: cible.id, role });
+  if (cible.id === proprietaireId(req.user.organisation_id))
+    return res.status(400).json({ erreur: "Le rôle du propriétaire ne peut pas être modifié. Transférez d'abord la propriété à un autre administrateur." });
+  // Nommer ou retirer un administrateur : réservé au propriétaire
+  if ((role === "ADMIN" || cible.role === "ADMIN") && !estProprietaire(req)) return res.status(403).json({ erreur: MSG_PROPRIO });
+  if (role === "ADMIN" && cible.actif && nbAdminsActifs(req.user.organisation_id, cible.id) >= MAX_ADMINS) return res.status(400).json({ erreur: MSG_LIMITE });
   try {
     db.prepare("UPDATE utilisateurs SET role=? WHERE id=?").run(role, cible.id);
     res.json({ id: cible.id, role });
@@ -737,20 +780,37 @@ app.patch("/api/utilisateurs/:id/role", requireAdmin, (req, res) => {
 app.patch("/api/utilisateurs/:id/desactiver", requireAdmin, (req, res) => {
   if (String(req.params.id) === String(req.user.id)) return res.status(400).json({ erreur: "Vous ne pouvez pas désactiver votre propre compte." });
   const cible = db.prepare("SELECT id, role FROM utilisateurs WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id);
-  if (cible && cible.role === "ADMIN" && nbAdminsActifs(req.user.organisation_id, cible.id) === 0)
-    return res.status(400).json({ erreur: "Impossible : l'organisation doit garder au moins un administrateur actif." });
-  try { res.json({ misAJour: db.prepare("UPDATE utilisateurs SET actif=0 WHERE id=? AND organisation_id=?").run(req.params.id, req.user.organisation_id).changes > 0 }); }
+  if (!cible) return res.status(404).json({ erreur: "Utilisateur introuvable dans votre organisation" });
+  if (cible.id === proprietaireId(req.user.organisation_id)) return res.status(400).json({ erreur: "Le propriétaire de l'organisation ne peut pas être désactivé." });
+  if (cible.role === "ADMIN" && !estProprietaire(req)) return res.status(403).json({ erreur: MSG_PROPRIO });
+  try { res.json({ misAJour: db.prepare("UPDATE utilisateurs SET actif=0 WHERE id=?").run(cible.id).changes > 0 }); }
   catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
 app.patch("/api/utilisateurs/:id/reactiver", requireAdmin, (req, res) => {
-  try { res.json({ misAJour: db.prepare("UPDATE utilisateurs SET actif=1 WHERE id=? AND organisation_id=?").run(req.params.id, req.user.organisation_id).changes > 0 }); }
+  const cible = db.prepare("SELECT id, role FROM utilisateurs WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id);
+  if (!cible) return res.status(404).json({ erreur: "Utilisateur introuvable dans votre organisation" });
+  if (cible.role === "ADMIN") {
+    if (!estProprietaire(req)) return res.status(403).json({ erreur: MSG_PROPRIO });
+    if (nbAdminsActifs(req.user.organisation_id, cible.id) >= MAX_ADMINS) return res.status(400).json({ erreur: MSG_LIMITE + " Retirez d'abord un autre administrateur." });
+  }
+  try { res.json({ misAJour: db.prepare("UPDATE utilisateurs SET actif=1 WHERE id=?").run(cible.id).changes > 0 }); }
   catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
+// Transférer la propriété à un autre administrateur actif (ex. départ du propriétaire)
+app.post("/api/organisation/proprietaire", requireAdmin, (req, res) => {
+  if (!estProprietaire(req)) return res.status(403).json({ erreur: "Seul le propriétaire peut transférer la propriété." });
+  const cible = db.prepare("SELECT id, role, actif FROM utilisateurs WHERE id=? AND organisation_id=?").get(req.body.utilisateur_id, req.user.organisation_id);
+  if (!cible || cible.role !== "ADMIN" || !cible.actif) return res.status(400).json({ erreur: "La propriété ne peut être transférée qu'à un administrateur actif de l'organisation." });
+  if (cible.id === req.user.id) return res.status(400).json({ erreur: "Vous êtes déjà le propriétaire." });
+  db.prepare("UPDATE organisations SET proprietaire_id=? WHERE id=?").run(cible.id, req.user.organisation_id);
+  res.json({ proprietaire_id: cible.id });
 });
 
 // Profil courant (rôle à jour, utile si un admin l'a modifié)
 app.get("/api/moi", (req, res) => {
-  res.json({ id: req.user.id, nom: req.user.nom, prenom: req.user.prenom, email: req.user.email, role: req.user.role });
+  res.json({ id: req.user.id, nom: req.user.nom, prenom: req.user.prenom, email: req.user.email, role: req.user.role, est_proprietaire: estProprietaire(req), max_admins: MAX_ADMINS });
 });
 
 app.get("/api/organisation", (req, res) => {
@@ -782,6 +842,7 @@ app.post("/api/organisation/codes/regenerer", requireAdmin, (req, res) => {
 // Recalcul des scores au démarrage (corrige les anciens scores additionnés)
 // puis toutes les heures (les événements de plus de 30 jours cessent de compter)
 completerCodesIngenieur();
+{ const n = completerProprietaires(); if (n) console.log(`✅ Propriétaire défini pour ${n} organisation(s)`); }
 console.log(`✅ Scores de risque recalculés pour ${recalculerTousLesScores()} équipement(s)`);
 setInterval(() => { try { recalculerTousLesScores(); } catch (e) { console.error("Recalcul des scores :", e.message); } }, 60 * 60 * 1000);
 
