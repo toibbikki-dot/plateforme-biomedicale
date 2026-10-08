@@ -19,6 +19,7 @@ function badge(statut) {
     "HAUTE":{background:"rgba(255,77,109,0.12)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.25)"},
     "MOYENNE":{background:"rgba(245,158,11,0.15)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.3)"},
     "BASSE":{background:"rgba(0,212,170,0.15)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.3)"},
+    "INFO":{background:"rgba(0,212,170,0.15)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.3)"},
     "ADMIN":{background:"rgba(124,58,237,0.15)",color:"#A78BFA",border:"1px solid rgba(124,58,237,0.3)"},
     "INGENIEUR":{background:"rgba(59,130,246,0.15)",color:"#60A5FA",border:"1px solid rgba(59,130,246,0.3)"},
     "TECHNICIEN":{background:"rgba(0,212,170,0.15)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.3)"},
@@ -671,8 +672,25 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
   </div>
 ));
 
-const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitoring,changerEquipMonitoring,token})=>{
+const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitoring,changerEquipMonitoring,token,peutModifier})=>{
   const [capteursConfig,setCapteursConfig]=useState(null);
+  const [cleAppareil,setCleAppareil]=useState(null);
+  const [erreurCle,setErreurCle]=useState("");
+  const [cleCopiee,setCleCopiee]=useState(false);
+  useEffect(()=>{setCleAppareil(null);setErreurCle("");setCleCopiee(false);},[iotEquipId]);
+
+  async function afficherCle(regenerer=false){
+    setErreurCle("");setCleCopiee(false);
+    if(regenerer&&!window.confirm("⚠️ Régénérer la clé ?\n\nL'ESP32 qui utilise l'ancienne clé ne pourra plus envoyer de données tant que vous n'aurez pas téléversé la nouvelle clé dans son programme.")) return;
+    try{
+      const r=await fetch(`${API}/equipements/${iotEquipId}/cle`,{method:regenerer?"POST":"GET",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`}});
+      const d=await r.json();
+      if(r.ok) setCleAppareil(d.cle_appareil); else setErreurCle(d.erreur||"Impossible d'obtenir la clé.");
+    }catch(err){setErreurCle("Erreur réseau : "+err.message);}
+  }
+  async function copierCle(){
+    try{await navigator.clipboard.writeText(cleAppareil);setCleCopiee(true);setTimeout(()=>setCleCopiee(false),2500);}catch{setErreurCle("Copie impossible : sélectionnez la clé et faites Ctrl + C.");}
+  }
   const [showConfigModal,setShowConfigModal]=useState(false);
   const [configForm,setConfigForm]=useState({
     nb_capteurs_actifs:2,
@@ -827,6 +845,32 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
           <div style={{fontSize:11,color:monitoringActif?"#00D4AA":"#334155",fontWeight:600}}>{monitoringActif?"● EN COURS":"○ INACTIF"}</div>
         </div>
       </div>
+
+      {/* Clé d'appareil ESP32 (réservée à l'administrateur et à l'ingénieur) */}
+      {peutModifier&&equipementActuel&&(
+        <div style={S.card}>
+          <div style={S.cardTitle}>🔑 Clé de l'appareil ESP32 — {equipementActuel.nom}</div>
+          <div style={{fontSize:13,color:"#64748B",marginBottom:14,lineHeight:1.6}}>
+            Cette clé secrète identifie l'ESP32 installé sur cet équipement. Copiez-la dans le programme Arduino
+            (ligne <code style={{color:"#A78BFA"}}>DEVICE_KEY</code>) avant de le téléverser. Ne la partagez pas.
+          </div>
+          {!cleAppareil?(
+            <button style={S.btn("#A78BFA")} onClick={()=>afficherCle(false)}>👁️ Afficher la clé</button>
+          ):(
+            <>
+              <div style={{fontFamily:"monospace",fontSize:13,color:"#00D4AA",background:"rgba(0,0,0,0.35)",border:"1px solid rgba(0,212,170,0.25)",borderRadius:8,padding:"12px 14px",wordBreak:"break-all",userSelect:"all",marginBottom:12}}>
+                const char* DEVICE_KEY = "{cleAppareil}";
+              </div>
+              <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                <button style={S.btn("#00D4AA")} onClick={copierCle}>{cleCopiee?"✅ Copiée !":"📋 Copier la clé"}</button>
+                <button style={S.btn("#64748B")} onClick={()=>setCleAppareil(null)}>🙈 Masquer</button>
+                <button style={S.btn("#FF4D6D")} onClick={()=>afficherCle(true)}>🔄 Régénérer</button>
+              </div>
+            </>
+          )}
+          {erreurCle&&<div style={{marginTop:12,color:"#FF4D6D",fontSize:13}}>❌ {erreurCle}</div>}
+        </div>
+      )}
 
       {monitoringActif?(
         <>
@@ -1094,7 +1138,7 @@ const Calendrier = memo(({maintenances})=>{
 
 const Alertes = memo(({alertes,equipements,lireAlerte,setOnglet})=>(
   <div>
-    {alertes.length>0&&(<div style={S.card}><div style={S.cardTitle}>🔔 Alertes automatiques</div>{alertes.slice(0,10).map(a=>(<div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",marginBottom:8,borderRadius:8,background:a.estLue?"rgba(255,255,255,0.02)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.06)":"rgba(245,158,11,0.06)",border:`1px solid ${a.estLue?"rgba(255,255,255,0.05)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.2)":"rgba(245,158,11,0.2)"}`,opacity:a.estLue?0.6:1}}><div><div style={{fontWeight:700,color:a.severite==="CRITIQUE"?"#FF4D6D":"#F59E0B",fontSize:13}}>{a.severite==="CRITIQUE"?"🔴":"🟡"} {a.type} — Équipement #{a.equipement_id}</div><div style={{fontSize:12,color:"#475569",marginTop:4}}>{a.message}</div><div style={{fontSize:11,color:"#334155",marginTop:2}}>{formaterDate(a.createdAt)}</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={badge(a.severite)}>{a.severite}</span>{!a.estLue&&<button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>lireAlerte(a.id)}>Lue</button>}</div></div>))}</div>)}
+    {alertes.length>0&&(<div style={S.card}><div style={S.cardTitle}>🔔 Alertes automatiques</div>{alertes.slice(0,10).map(a=>(<div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",marginBottom:8,borderRadius:8,background:a.estLue?"rgba(255,255,255,0.02)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.06)":a.severite==="INFO"?"rgba(0,212,170,0.06)":"rgba(245,158,11,0.06)",border:`1px solid ${a.estLue?"rgba(255,255,255,0.05)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.2)":a.severite==="INFO"?"rgba(0,212,170,0.2)":"rgba(245,158,11,0.2)"}`,opacity:a.estLue?0.6:1}}><div><div style={{fontWeight:700,color:a.severite==="CRITIQUE"?"#FF4D6D":a.severite==="INFO"?"#00D4AA":"#F59E0B",fontSize:13}}>{a.severite==="CRITIQUE"?"🔴":a.severite==="INFO"?"✅":"🟡"} {a.type} — Équipement #{a.equipement_id}</div><div style={{fontSize:12,color:"#475569",marginTop:4}}>{a.message}</div><div style={{fontSize:11,color:"#334155",marginTop:2}}>{formaterDate(a.createdAt)}</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={badge(a.severite)}>{a.severite}</span>{!a.estLue&&<button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>lireAlerte(a.id)}>Lue</button>}</div></div>))}</div>)}
     {equipements.filter(e=>e.scoreRisque>=75).map(e=>(<div key={e.id} style={{background:"rgba(255,77,109,0.06)",border:"1px solid rgba(255,77,109,0.2)",borderRadius:10,padding:16,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontWeight:700,color:"#FF4D6D"}}>🔴 RISQUE CRITIQUE — {e.nom}</div><div style={{fontSize:13,color:"rgba(255,77,109,0.7)",marginTop:4}}>Service : {e.service} | Score : {e.scoreRisque}%</div></div><button style={S.btnSolid("#FF4D6D")} onClick={()=>setOnglet("maintenances")}>Planifier</button></div>))}
     {alertes.length===0&&equipements.filter(e=>e.scoreRisque>=50).length===0&&(<div style={{...S.card,padding:32,textAlign:"center"}}><div style={{fontSize:18,color:"#00D4AA",fontWeight:700}}>✅ Aucune alerte active</div></div>)}
   </div>
@@ -1164,6 +1208,12 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout}){
   const hdrs=useCallback(()=>({"Content-Type":"application/json","Authorization":`Bearer ${token}`}),[token]);
 
   useEffect(()=>{charger();},[]);
+  // Si l'équipement mémorisé pour le monitoring n'appartient pas à cette organisation
+  // (ex. nouveau compte, ou équipement supprimé), on sélectionne le premier de la liste.
+  useEffect(()=>{
+    if(!Array.isArray(equipements)||equipements.length===0) return;
+    if(!equipements.some(e=>e.id===iotEquipId)) changerEquipMonitoring(equipements[0].id);
+  },[equipements]);
   useEffect(()=>{clearInterval(iotTimerRef.current);if(monitoringActif){chargerIot(iotEquipId);iotTimerRef.current=setInterval(()=>chargerIot(iotEquipId),5000);}return()=>clearInterval(iotTimerRef.current);},[monitoringActif,iotEquipId]);
 
   async function charger(){
@@ -1278,7 +1328,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout}){
         {onglet==="equipements"&&<Equipements equipements={equipements} peutModifier={peutModifier} supprimerEquipement={supprimerEquipement} changerEquipMonitoring={changerEquipMonitoring} setOnglet={setOnglet} token={token} charger={charger}/>}
         {onglet==="maintenances"&&<Maintenances maintenances={maintenances} equipements={equipements} ajouterMaintenance={ajouterMaintenance}/>}
         {onglet==="calendrier"&&<Calendrier maintenances={maintenances}/>}
-        {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring} token={token}/>}
+        {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring} token={token} peutModifier={peutModifier}/>}
         {onglet==="ia"&&<ModuleIA equipements={equipements} token={token} setOnglet={setOnglet}/>}
         {onglet==="alertes"&&<Alertes alertes={alertes} equipements={equipements} lireAlerte={lireAlerte} setOnglet={setOnglet}/>}
         {onglet==="utilisateurs"&&estAdmin&&estModeOrganisation&&<Utilisateurs utilisateurs={utilisateurs} currentUserId={user.id} desactiverUtilisateur={desactiverUtilisateur} reactiverUtilisateur={reactiverUtilisateur} ajouterUtilisateur={ajouterUtilisateur} organisation={organisation}/>}

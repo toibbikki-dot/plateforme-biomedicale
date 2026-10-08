@@ -4,6 +4,7 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -136,8 +137,42 @@ db.exec(`
 console.log("✅ Tables vérifiées/créées (mode multi-organisation)");
 
 // ════════════════════════════════════════════════════════════
+// MIGRATION — Clé d'appareil (une clé secrète par équipement)
+// L'ESP32 envoie cette clé : le serveur en déduit l'organisation
+// et l'équipement, et refuse toute clé inconnue.
+// ════════════════════════════════════════════════════════════
+const colonnesEquip = db.prepare("PRAGMA table_info(equipements)").all().map(c => c.name);
+if (!colonnesEquip.includes("cle_appareil")) {
+  db.exec("ALTER TABLE equipements ADD COLUMN cle_appareil TEXT");
+  console.log("✅ Colonne cle_appareil ajoutée");
+}
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_equipements_cle ON equipements(cle_appareil)");
+{
+  const equipSansCle = db.prepare("SELECT id FROM equipements WHERE cle_appareil IS NULL").all();
+  const majCle = db.prepare("UPDATE equipements SET cle_appareil=? WHERE id=?");
+  for (const e of equipSansCle) majCle.run(genererCleAppareil(), e.id);
+  if (equipSansCle.length) console.log(`✅ ${equipSansCle.length} clé(s) d'appareil générée(s)`);
+}
+
+// ════════════════════════════════════════════════════════════
 // UTILITAIRES
 // ════════════════════════════════════════════════════════════
+function genererCleAppareil() {
+  return "bm_" + crypto.randomBytes(16).toString("hex");
+}
+
+// Retire la clé secrète des objets équipement envoyés au navigateur
+function sansCle(equipement) {
+  if (!equipement) return equipement;
+  const { cle_appareil, ...reste } = equipement;
+  return reste;
+}
+
+function requireIngenieur(req, res, next) {
+  if (req.user.role !== "ADMIN" && req.user.role !== "INGENIEUR") return res.status(403).json({ erreur: "Accès réservé à l'administrateur ou à l'ingénieur" });
+  next();
+}
+
 function genererCodeInvitation() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -247,18 +282,49 @@ app.post("/api/auth/login", (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
-// IOT — Réception ESP32 (sans auth, s'identifie via organisation_id)
+// IOT — Réception ESP32 (authentifié par la clé d'appareil)
+// L'ESP32 envoie sa clé dans l'en-tête "X-Device-Key".
+// Le serveur retrouve lui-même l'organisation et l'équipement.
 // ════════════════════════════════════════════════════════════
+const chercherEquipParCle = db.prepare("SELECT id, organisation_id, statut FROM equipements WHERE cle_appareil=?");
+const dernierePanne = db.prepare("SELECT panne FROM iot_data WHERE equipement_id=? ORDER BY id DESC LIMIT 1");
+
 app.post("/api/capteurs", (req, res) => {
-  const { organisation_id, equipement_id, etat, panne, param1, param2, param3, param4, param5, param6, param7, param8 } = req.body;
-  if (!organisation_id || !equipement_id) return res.status(400).json({ erreur: "organisation_id et equipement_id sont obligatoires" });
+  const cle = req.headers["x-device-key"] || req.body.cle_appareil;
+  if (!cle) return res.status(401).json({ erreur: "Clé d'appareil manquante" });
+  const equip = chercherEquipParCle.get(String(cle));
+  if (!equip) return res.status(401).json({ erreur: "Clé d'appareil invalide" });
+
+  const { etat, panne } = req.body;
+  const params = [1, 2, 3, 4, 5, 6, 7, 8].map(i => {
+    const v = parseFloat(req.body[`param${i}`]);
+    return Number.isFinite(v) ? v : null;
+  });
+  const enPanne = !!panne;
+
   try {
-    db.prepare("INSERT INTO iot_data (organisation_id,equipement_id,etat,panne,param1,param2,param3,param4,param5,param6,param7,param8,timestamp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now','localtime'))").run(organisation_id, equipement_id, etat?1:0, panne?1:0, param1, param2, param3, param4, param5, param6, param7, param8);
-    if (panne) {
-      db.prepare("INSERT INTO alertes (organisation_id,equipement_id,type,severite,message,source) VALUES (?,?,'PANNE','CRITIQUE','Panne signalée par capteur','IOT')").run(organisation_id, equipement_id);
-      db.prepare("UPDATE equipements SET scoreRisque=MIN(100,scoreRisque+15), statut='En panne' WHERE id=? AND organisation_id=?").run(equipement_id, organisation_id);
-    }
-    res.json({ message: "Données IoT reçues", timestamp: new Date() });
+    const enregistrer = db.transaction(() => {
+      const precedent = dernierePanne.get(equip.id);
+      const etaitEnPanne = !!(precedent && precedent.panne);
+
+      db.prepare("INSERT INTO iot_data (organisation_id,equipement_id,etat,panne,param1,param2,param3,param4,param5,param6,param7,param8,timestamp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now','localtime'))")
+        .run(equip.organisation_id, equip.id, etat ? 1 : 0, enPanne ? 1 : 0, ...params);
+
+      // Nouvelle panne : une seule alerte au moment où elle apparaît
+      // (et non une alerte toutes les 5 secondes tant qu'elle dure)
+      if (enPanne && !etaitEnPanne) {
+        db.prepare("INSERT INTO alertes (organisation_id,equipement_id,type,severite,message,source) VALUES (?,?,'PANNE','CRITIQUE','Panne signalée par capteur','IOT')").run(equip.organisation_id, equip.id);
+        db.prepare("UPDATE equipements SET scoreRisque=MIN(100,scoreRisque+15), statut='En panne' WHERE id=?").run(equip.id);
+      }
+
+      // Panne résolue sur l'appareil : l'équipement repasse en service
+      if (!enPanne && etaitEnPanne && equip.statut === "En panne") {
+        db.prepare("INSERT INTO alertes (organisation_id,equipement_id,type,severite,message,source) VALUES (?,?,'RESOLUTION','INFO','Panne résolue (signalée par capteur)','IOT')").run(equip.organisation_id, equip.id);
+        db.prepare("UPDATE equipements SET statut='En service' WHERE id=?").run(equip.id);
+      }
+    });
+    enregistrer();
+    res.json({ message: "Données IoT reçues", equipement_id: equip.id, timestamp: new Date() });
   } catch (err) {
     res.status(500).json({ erreur: err.message });
   }
@@ -295,6 +361,9 @@ app.get("/api/capteurs/config/:equipementId", authMiddleware, (req, res) => {
 app.post("/api/capteurs/config", authMiddleware, (req, res) => {
   const { equipement_id, nb_capteurs_actifs, param1_nom, param1_unite, param2_nom, param2_unite, param3_nom, param3_unite, param4_nom, param4_unite, param5_nom, param5_unite, param6_nom, param6_unite, param7_nom, param7_unite, param8_nom, param8_unite } = req.body;
   if (!equipement_id) return res.status(400).json({ erreur: "equipement_id est obligatoire" });
+  // Cloisonnement : l'équipement doit appartenir à l'organisation de l'utilisateur
+  const equipOk = db.prepare("SELECT id FROM equipements WHERE id=? AND organisation_id=?").get(equipement_id, req.user.organisation_id);
+  if (!equipOk) return res.status(404).json({ erreur: "Équipement introuvable dans votre organisation. Sélectionnez un équipement dans la liste." });
   try {
     const result = db.prepare(`
       INSERT INTO equipement_capteurs (
@@ -338,15 +407,38 @@ app.post("/api/capteurs/config", authMiddleware, (req, res) => {
 app.use("/api", authMiddleware);
 
 app.get("/api/equipements", (req, res) => {
-  try { res.json(db.prepare("SELECT * FROM equipements WHERE organisation_id=? ORDER BY id DESC").all(req.user.organisation_id)); }
+  try { res.json(db.prepare("SELECT * FROM equipements WHERE organisation_id=? ORDER BY id DESC").all(req.user.organisation_id).map(sansCle)); }
   catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
 app.post("/api/equipements", (req, res) => {
   const { nom, marque, numeroSerie, service, statut, dateAcquisition, prochaineMaintenance } = req.body;
   try {
-    const result = db.prepare("INSERT INTO equipements (organisation_id,nom,marque,numeroSerie,service,statut,dateAcquisition,prochaineMaintenance) VALUES (?,?,?,?,?,?,?,?)").run(req.user.organisation_id, nom, marque, numeroSerie, service, statut||"En service", dateAcquisition, prochaineMaintenance);
+    const result = db.prepare("INSERT INTO equipements (organisation_id,nom,marque,numeroSerie,service,statut,dateAcquisition,prochaineMaintenance,cle_appareil) VALUES (?,?,?,?,?,?,?,?,?)").run(req.user.organisation_id, nom, marque, numeroSerie, service, statut||"En service", dateAcquisition, prochaineMaintenance, genererCleAppareil());
     res.json({ id: result.lastInsertRowid, organisation_id: req.user.organisation_id, nom, marque, numeroSerie, service, statut, scoreRisque: 0 });
+  } catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
+// Clé d'appareil : consulter (la génère si elle manque)
+app.get("/api/equipements/:id/cle", requireIngenieur, (req, res) => {
+  try {
+    const equip = db.prepare("SELECT id, nom, cle_appareil FROM equipements WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id);
+    if (!equip) return res.status(404).json({ erreur: "Équipement introuvable dans votre organisation" });
+    if (!equip.cle_appareil) {
+      equip.cle_appareil = genererCleAppareil();
+      db.prepare("UPDATE equipements SET cle_appareil=? WHERE id=?").run(equip.cle_appareil, equip.id);
+    }
+    res.json({ equipement_id: equip.id, nom: equip.nom, cle_appareil: equip.cle_appareil });
+  } catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
+// Clé d'appareil : régénérer (l'ancienne clé ne fonctionne plus)
+app.post("/api/equipements/:id/cle", requireIngenieur, (req, res) => {
+  try {
+    const nouvelle = genererCleAppareil();
+    const ok = db.prepare("UPDATE equipements SET cle_appareil=? WHERE id=? AND organisation_id=?").run(nouvelle, req.params.id, req.user.organisation_id).changes > 0;
+    if (!ok) return res.status(404).json({ erreur: "Équipement introuvable dans votre organisation" });
+    res.json({ equipement_id: parseInt(req.params.id), cle_appareil: nouvelle });
   } catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
@@ -355,6 +447,8 @@ app.delete("/api/equipements/:id", (req, res) => {
     const id = req.params.id;
     const orgId = req.user.organisation_id;
     const supprimerEnCascade = db.transaction(() => {
+      // Cloisonnement : on ne touche à rien si l'équipement n'est pas à cette organisation
+      if (!db.prepare("SELECT id FROM equipements WHERE id=? AND organisation_id=?").get(id, orgId)) return false;
       db.prepare("DELETE FROM maintenances WHERE equipementId=? AND organisation_id=?").run(id, orgId);
       db.prepare("DELETE FROM alertes WHERE equipement_id=? AND organisation_id=?").run(id, orgId);
       db.prepare("DELETE FROM iot_data WHERE equipement_id=?").run(id);
