@@ -167,6 +167,7 @@ function PageInscription({onLogin,onRetourConnexion}) {
   const [erreur,setErreur]=useState("");
   const [chargement,setChargement]=useState(false);
   const [codeGenere,setCodeGenere]=useState(null);
+  const [codeIngenieurGenere,setCodeIngenieurGenere]=useState(null);
 
   async function sInscrire() {
     if(!form.nom||!form.email||!form.password){setErreur("Veuillez remplir tous les champs obligatoires.");return;}
@@ -178,7 +179,7 @@ function PageInscription({onLogin,onRetourConnexion}) {
       const data=await res.json();
       if(!res.ok){setErreur(data.erreur||"Erreur lors de l'inscription.");return;}
       if(data.codeGenere){
-        setCodeGenere(data.codeGenere);
+        setCodeGenere(data.codeGenere);setCodeIngenieurGenere(data.codeIngenieur||null);
         // On garde les infos en mémoire pour finaliser la connexion après que l'utilisateur ait vu son code
         window.__pendingLogin = {user:data.user, token:data.token, preferences:data.preferences, organisation:data.organisation};
         return;
@@ -211,11 +212,17 @@ function PageInscription({onLogin,onRetourConnexion}) {
           <div style={{background:"rgba(4,18,37,0.9)",backdropFilter:"blur(20px)",borderRadius:20,padding:"40px 36px",border:"1px solid rgba(0,212,170,0.2)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
             <div style={{fontSize:44,marginBottom:12}}>🎉</div>
             <h2 style={{color:"white",fontSize:20,marginBottom:8}}>Organisation créée !</h2>
-            <p style={{color:"#94A3B8",fontSize:13,marginBottom:20}}>Partagez ce code à vos collègues (ingénieurs, techniciens) pour qu'ils rejoignent votre espace de travail.</p>
-            <div style={{background:"rgba(0,212,170,0.1)",border:"2px dashed rgba(0,212,170,0.4)",borderRadius:12,padding:"20px",marginBottom:24}}>
-              <div style={{fontSize:11,color:"#475569",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Code d'invitation</div>
-              <div style={{fontSize:32,fontWeight:900,color:"#00D4AA",letterSpacing:"0.15em"}}>{codeGenere}</div>
+            <p style={{color:"#94A3B8",fontSize:13,marginBottom:20}}>Chaque code donne un rôle précis à la personne qui l'utilise pour rejoindre votre organisation. Vous les retrouverez à tout moment dans la page « Utilisateurs ».</p>
+            <div style={{background:"rgba(0,212,170,0.1)",border:"2px dashed rgba(0,212,170,0.4)",borderRadius:12,padding:"16px",marginBottom:12}}>
+              <div style={{fontSize:11,color:"#475569",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>🛠️ Code Technicien — à partager avec l'équipe</div>
+              <div style={{fontSize:28,fontWeight:900,color:"#00D4AA",letterSpacing:"0.15em"}}>{codeGenere}</div>
             </div>
+            {codeIngenieurGenere&&(
+              <div style={{background:"rgba(59,130,246,0.1)",border:"2px dashed rgba(59,130,246,0.4)",borderRadius:12,padding:"16px",marginBottom:24}}>
+                <div style={{fontSize:11,color:"#475569",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>🔧 Code Ingénieur — à donner aux ingénieurs seulement</div>
+                <div style={{fontSize:28,fontWeight:900,color:"#60A5FA",letterSpacing:"0.15em"}}>{codeIngenieurGenere}</div>
+              </div>
+            )}
             <button onClick={continuerApresCode} style={{width:"100%",padding:"13px",background:"#00D4AA",color:"#020B18",border:"none",borderRadius:10,fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 0 20px rgba(0,212,170,0.3)"}}>
               → Accéder à ma plateforme
             </button>
@@ -239,7 +246,7 @@ function PageInscription({onLogin,onRetourConnexion}) {
             {[
               {id:"INDIVIDUEL",icon:"👤",titre:"Utilisation individuelle",desc:"Gérez votre propre parc d'équipements en toute autonomie.",c:"#00D4AA"},
               {id:"CREER_ORGANISATION",icon:"🏥",titre:"Créer une organisation",desc:"Vous êtes responsable d'un hôpital/service. Un code sera généré pour inviter votre équipe.",c:"#A78BFA"},
-              {id:"REJOINDRE_ORGANISATION",icon:"🔑",titre:"Rejoindre une organisation",desc:"Un administrateur vous a donné un code d'invitation.",c:"#60A5FA"},
+              {id:"REJOINDRE_ORGANISATION",icon:"🔑",titre:"Rejoindre une organisation",desc:"Un administrateur vous a donné un code d'invitation. Ce code détermine votre rôle (technicien ou ingénieur).",c:"#60A5FA"},
             ].map(opt=>(
               <div key={opt.id} onClick={()=>setMode(opt.id)} style={{cursor:"pointer",background:"rgba(4,18,37,0.85)",backdropFilter:"blur(20px)",borderRadius:14,padding:"20px 24px",border:`1px solid ${opt.c}30`,display:"flex",alignItems:"center",gap:16,transition:"all 0.15s"}}>
                 <div style={{fontSize:32,width:50,height:50,borderRadius:12,background:`${opt.c}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{opt.icon}</div>
@@ -297,6 +304,7 @@ function PageInscription({onLogin,onRetourConnexion}) {
             <div style={{marginBottom:16}}>
               <label style={S.lbl}>Code d'invitation *</label>
               <input style={{...S.inp,letterSpacing:"0.1em",fontWeight:700}} placeholder="Ex: AB3X9K2P" value={form.codeInvitation} onChange={e=>setForm(p=>({...p,codeInvitation:e.target.value.toUpperCase()}))}/>
+              <div style={{fontSize:11,color:"#475569",marginTop:6}}>Votre rôle (technicien ou ingénieur) dépend du code que l'administrateur vous a transmis.</div>
             </div>
           )}
           {erreur&&<div style={{background:"rgba(255,77,109,0.1)",border:"1px solid rgba(255,77,109,0.3)",borderRadius:8,padding:"10px 14px",marginBottom:16,color:"#FF4D6D",fontSize:13}}>❌ {erreur}</div>}
@@ -1243,21 +1251,37 @@ const Alertes = memo(({alertes,equipements,lireAlerte,setOnglet})=>(
   </div>
 ));
 
-const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,reactiverUtilisateur,ajouterUtilisateur,organisation,changerRole})=>{
+const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,reactiverUtilisateur,ajouterUtilisateur,organisation,changerRole,token})=>{
+  const [codes,setCodes]=useState(null);
+  const [erreurCodes,setErreurCodes]=useState("");
+  const enTetes={"Content-Type":"application/json","Authorization":`Bearer ${token}`};
+  useEffect(()=>{(async()=>{try{const r=await fetch(`${API}/organisation/codes`,{headers:enTetes});const d=await r.json();if(r.ok)setCodes(d);else setErreurCodes(d.erreur||"");}catch{}})();},[]);
+  async function regenererCode(role){
+    if(!window.confirm(`Régénérer le code ${role==="INGENIEUR"?"Ingénieur":"Technicien"} ?\n\nL'ancien code ne fonctionnera plus. Les comptes déjà créés ne sont pas touchés.`)) return;
+    try{const r=await fetch(`${API}/organisation/codes/regenerer`,{method:"POST",headers:enTetes,body:JSON.stringify({role})});const d=await r.json();if(r.ok){setCodes(d);setErreurCodes("");}else setErreurCodes(d.erreur||"Erreur");}catch{setErreurCodes("Erreur réseau");}
+  }
   const [showForm,setShowForm]=useState(false);
   const [form,setForm]=useState({nom:"",prenom:"",email:"",password:"",role:"TECHNICIEN"});
   function sauvegarder(){ajouterUtilisateur(form,()=>{setShowForm(false);setForm({nom:"",prenom:"",email:"",password:"",role:"TECHNICIEN"});});}
   return(
     <div>
-      {organisation?.code_invitation&&(
-        <div style={{...S.card,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12,background:"rgba(0,212,170,0.05)",border:"1px solid rgba(0,212,170,0.2)"}}>
-          <div>
-            <div style={{fontSize:11,color:"#475569",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Code d'invitation de votre organisation</div>
-            <div style={{fontSize:13,color:"#94A3B8"}}>Partagez ce code à vos collègues pour qu'ils rejoignent <strong style={{color:"white"}}>{organisation.nom}</strong></div>
+      {codes&&(
+        <div style={S.card}>
+          <div style={S.cardTitle}>🔑 Codes d'invitation de {organisation?.nom||"votre organisation"}</div>
+          <div style={{fontSize:13,color:"#64748B",marginBottom:16,lineHeight:1.6}}>Le code utilisé à l'inscription (« Rejoindre une organisation ») détermine le rôle de la personne. Pour nommer un administrateur, changez le rôle dans le tableau ci-dessous.</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16}}>
+            {[{role:"TECHNICIEN",titre:"🛠️ Code Technicien",aide:"À partager avec l'équipe de terrain",code:codes.technicien,c:"#00D4AA"},{role:"INGENIEUR",titre:"🔧 Code Ingénieur",aide:"À donner aux ingénieurs biomédicaux seulement",code:codes.ingenieur,c:"#60A5FA"}].map(k=>(
+              <div key={k.role} style={{background:`${k.c}10`,border:`1px solid ${k.c}40`,borderRadius:12,padding:16}}>
+                <div style={{fontSize:13,fontWeight:700,color:"white"}}>{k.titre}</div>
+                <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{k.aide}</div>
+                <div style={{fontSize:24,fontWeight:900,color:k.c,letterSpacing:"0.12em",userSelect:"all",marginBottom:10}}>{k.code}</div>
+                <button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>regenererCode(k.role)}>🔄 Régénérer</button>
+              </div>
+            ))}
           </div>
-          <div style={{fontSize:22,fontWeight:900,color:"#00D4AA",letterSpacing:"0.12em",background:"rgba(0,212,170,0.1)",padding:"8px 18px",borderRadius:8}}>{organisation.code_invitation}</div>
         </div>
       )}
+      {erreurCodes&&<div style={{color:"#FF4D6D",fontSize:13,marginBottom:12}}>❌ {erreurCodes}</div>}
       <div style={{marginBottom:20}}><button style={S.btn()} onClick={()=>setShowForm(true)}>+ Ajouter un utilisateur</button></div>
       <div style={S.card}>
         <table style={S.tbl}>
@@ -1475,7 +1499,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
         {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring} token={token} peutModifier={peutModifier}/>}
         {onglet==="ia"&&<ModuleIA equipements={equipements} token={token} setOnglet={setOnglet}/>}
         {onglet==="alertes"&&<Alertes alertes={alertes} equipements={equipements} lireAlerte={lireAlerte} setOnglet={setOnglet}/>}
-        {onglet==="utilisateurs"&&estAdmin&&estModeOrganisation&&<Utilisateurs utilisateurs={utilisateurs} currentUserId={user.id} desactiverUtilisateur={desactiverUtilisateur} reactiverUtilisateur={reactiverUtilisateur} ajouterUtilisateur={ajouterUtilisateur} organisation={organisation} changerRole={changerRole}/>}
+        {onglet==="utilisateurs"&&estAdmin&&estModeOrganisation&&<Utilisateurs utilisateurs={utilisateurs} currentUserId={user.id} desactiverUtilisateur={desactiverUtilisateur} reactiverUtilisateur={reactiverUtilisateur} ajouterUtilisateur={ajouterUtilisateur} organisation={organisation} changerRole={changerRole} token={token}/>}
       </div>
     </div>
   );

@@ -173,6 +173,25 @@ db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_equipements_cle ON equipements(cl
 }
 
 // ════════════════════════════════════════════════════════════
+// MIGRATION — Codes d'invitation par rôle
+//   code_invitation : code TECHNICIEN (partagé avec l'équipe de terrain)
+//   code_ingenieur  : code INGÉNIEUR (donné aux ingénieurs seulement)
+// ════════════════════════════════════════════════════════════
+{
+  const colsOrg = db.prepare("PRAGMA table_info(organisations)").all().map(c => c.name);
+  if (!colsOrg.includes("code_ingenieur")) {
+    db.exec("ALTER TABLE organisations ADD COLUMN code_ingenieur TEXT");
+    console.log("✅ Colonne code_ingenieur ajoutée");
+  }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_org_code_ingenieur ON organisations(code_ingenieur)");
+}
+function completerCodesIngenieur() {
+  const orgs = db.prepare("SELECT id FROM organisations WHERE type='ORGANISATION' AND code_ingenieur IS NULL").all();
+  for (const o of orgs) db.prepare("UPDATE organisations SET code_ingenieur=? WHERE id=?").run(genererCodeInvitation(), o.id);
+  if (orgs.length) console.log(`✅ ${orgs.length} code(s) ingénieur générés`);
+}
+
+// ════════════════════════════════════════════════════════════
 // MIGRATION — Date de fin des maintenances
 // ════════════════════════════════════════════════════════════
 {
@@ -253,9 +272,12 @@ function requireIngenieur(req, res, next) {
 
 function genererCodeInvitation() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
-  return code;
+  for (;;) {
+    let code = "";
+    for (let i = 0; i < 8; i++) code += chars[crypto.randomInt(chars.length)];
+    const existe = db.prepare("SELECT 1 FROM organisations WHERE code_invitation=? OR code_ingenieur=?").get(code, code);
+    if (!existe) return code;
+  }
 }
 
 function authMiddleware(req, res, next) {
@@ -305,16 +327,20 @@ app.post("/api/auth/inscription", (req, res) => {
     if (mode === "CREER_ORGANISATION") {
       if (!nomOrganisation) return res.status(400).json({ erreur: "Le nom de l'organisation est obligatoire" });
       const code = genererCodeInvitation();
-      const orgId = db.prepare("INSERT INTO organisations (nom, type, code_invitation) VALUES (?, 'ORGANISATION', ?)").run(nomOrganisation, code).lastInsertRowid;
+      const codeIngenieur = genererCodeInvitation();
+      const orgId = db.prepare("INSERT INTO organisations (nom, type, code_invitation, code_ingenieur) VALUES (?, 'ORGANISATION', ?, ?)").run(nomOrganisation, code, codeIngenieur).lastInsertRowid;
       const userId = db.prepare("INSERT INTO utilisateurs (organisation_id, nom, prenom, email, password, role) VALUES (?,?,?,?,?,'ADMIN')").run(orgId, nom, prenom || " ", email, hash).lastInsertRowid;
-      return creerSessionEtRepondre(userId, res, { codeGenere: code });
+      return creerSessionEtRepondre(userId, res, { codeGenere: code, codeIngenieur });
     }
 
     if (mode === "REJOINDRE_ORGANISATION") {
       if (!codeInvitation) return res.status(400).json({ erreur: "Le code d'invitation est obligatoire" });
-      const org = db.prepare("SELECT * FROM organisations WHERE code_invitation=?").get(codeInvitation.toUpperCase().trim());
+      const codeSaisi = codeInvitation.toUpperCase().trim();
+      const org = db.prepare("SELECT * FROM organisations WHERE type='ORGANISATION' AND (code_invitation=? OR code_ingenieur=?)").get(codeSaisi, codeSaisi);
       if (!org) return res.status(404).json({ erreur: "Code d'invitation invalide" });
-      const userId = db.prepare("INSERT INTO utilisateurs (organisation_id, nom, prenom, email, password, role) VALUES (?,?,?,?,?,'TECHNICIEN')").run(org.id, nom, prenom || " ", email, hash).lastInsertRowid;
+      // Le rôle est déterminé par le code reçu de l'administrateur, pas choisi par l'utilisateur
+      const role = org.code_ingenieur === codeSaisi ? "INGENIEUR" : "TECHNICIEN";
+      const userId = db.prepare("INSERT INTO utilisateurs (organisation_id, nom, prenom, email, password, role) VALUES (?,?,?,?,?,?)").run(org.id, nom, prenom || " ", email, hash, role).lastInsertRowid;
       return creerSessionEtRepondre(userId, res);
     }
 
@@ -334,7 +360,7 @@ function creerSessionEtRepondre(userId, res, extra = {}) {
     res.json({
       token,
       user: { id: user.id, nom: user.nom, prenom: user.prenom, email: user.email, role: user.role },
-      organisation: { id: user.organisation_id, nom: user.organisationNom, type: user.organisationType, code_invitation: user.code_invitation },
+      organisation: { id: user.organisation_id, nom: user.organisationNom, type: user.organisationType },
       preferences: { monitoring_actif: 0, monitoring_equip_id: 1 },
       ...extra,
     });
@@ -358,7 +384,7 @@ app.post("/api/auth/login", (req, res) => {
     res.json({
       token,
       user: { id: user.id, nom: user.nom, prenom: user.prenom, email: user.email, role: user.role },
-      organisation: { id: user.organisation_id, nom: user.organisationNom, type: user.organisationType, code_invitation: user.code_invitation },
+      organisation: { id: user.organisation_id, nom: user.organisationNom, type: user.organisationType },
       preferences: pref || { monitoring_actif: 0, monitoring_equip_id: 1 },
     });
   } catch (err) {
@@ -728,12 +754,34 @@ app.get("/api/moi", (req, res) => {
 });
 
 app.get("/api/organisation", (req, res) => {
-  try { res.json(db.prepare("SELECT id,nom,type,code_invitation FROM organisations WHERE id=?").get(req.user.organisation_id)); }
+  try { res.json(db.prepare("SELECT id,nom,type FROM organisations WHERE id=?").get(req.user.organisation_id)); }
   catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
+// Codes d'invitation par rôle (administrateur uniquement)
+app.get("/api/organisation/codes", requireAdmin, (req, res) => {
+  const org = db.prepare("SELECT type, code_invitation, code_ingenieur FROM organisations WHERE id=?").get(req.user.organisation_id);
+  if (!org || org.type !== "ORGANISATION") return res.status(400).json({ erreur: "Les codes d'invitation n'existent que pour les organisations" });
+  res.json({ technicien: org.code_invitation, ingenieur: org.code_ingenieur });
+});
+
+app.post("/api/organisation/codes/regenerer", requireAdmin, (req, res) => {
+  const { role } = req.body;
+  const colonne = role === "INGENIEUR" ? "code_ingenieur" : role === "TECHNICIEN" ? "code_invitation" : null;
+  if (!colonne) return res.status(400).json({ erreur: "Rôle invalide (TECHNICIEN ou INGENIEUR)" });
+  const org = db.prepare("SELECT type FROM organisations WHERE id=?").get(req.user.organisation_id);
+  if (!org || org.type !== "ORGANISATION") return res.status(400).json({ erreur: "Les codes d'invitation n'existent que pour les organisations" });
+  try {
+    const nouveau = genererCodeInvitation();
+    db.prepare(`UPDATE organisations SET ${colonne}=? WHERE id=?`).run(nouveau, req.user.organisation_id);
+    const maj = db.prepare("SELECT code_invitation, code_ingenieur FROM organisations WHERE id=?").get(req.user.organisation_id);
+    res.json({ technicien: maj.code_invitation, ingenieur: maj.code_ingenieur });
+  } catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
 // Recalcul des scores au démarrage (corrige les anciens scores additionnés)
 // puis toutes les heures (les événements de plus de 30 jours cessent de compter)
+completerCodesIngenieur();
 console.log(`✅ Scores de risque recalculés pour ${recalculerTousLesScores()} équipement(s)`);
 setInterval(() => { try { recalculerTousLesScores(); } catch (e) { console.error("Recalcul des scores :", e.message); } }, 60 * 60 * 1000);
 
