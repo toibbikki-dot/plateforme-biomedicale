@@ -323,6 +323,14 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
   const [entrainement, setEntrainement] = useState(false);
   const [iaConnectee, setIaConnectee] = useState(false);
   const [equipSelectionne, setEquipSelectionne] = useState(null);
+  const [erreurIA, setErreurIA] = useState("");
+
+  // Le serveur IA travaille avec l'identité de l'utilisateur connecté :
+  // il n'analyse que les équipements de son organisation.
+  const enTetesIA = () => ({"Content-Type":"application/json","Authorization":`Bearer ${token}`});
+  async function lireErreur(r) {
+    try { const d = await r.json(); return d.erreur || `Erreur ${r.status}`; } catch { return `Erreur ${r.status}`; }
+  }
 
   useEffect(() => {
     verifierIA();
@@ -342,17 +350,19 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
 
   async function chargerStats() {
     try {
-      const r = await fetch(`${API_IA}/stats`);
-      if (r.ok) setStatsIA(await r.json());
+      const r = await fetch(`${API_IA}/stats`, {headers: enTetesIA()});
+      if (r.ok) { setStatsIA(await r.json()); setErreurIA(""); }
+      else setErreurIA(await lireErreur(r));
     } catch {}
   }
 
   async function entrainerModele() {
     setEntrainement(true);
     try {
-      const r = await fetch(`${API_IA}/entrainer`, {method:"POST"});
+      const r = await fetch(`${API_IA}/entrainer`, {method:"POST", headers: enTetesIA()});
       const data = await r.json();
-      alert(data.message);
+      alert(data.message || data.erreur);
+      chargerStats();
     } catch {
       alert("Erreur lors de l'entraînement");
     } finally {
@@ -365,7 +375,9 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
     setPredictionDetail(null);
     setEquipSelectionne(id);
     try {
-      const r = await fetch(`${API_IA}/prediction/${id}`);
+      const r = await fetch(`${API_IA}/prediction/${id}`, {headers: enTetesIA()});
+      if (!r.ok) { setErreurIA(await lireErreur(r)); return; }
+      setErreurIA("");
       if (r.ok) {
         const data = await r.json();
         setPredictionDetail(data);
@@ -377,7 +389,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
         });
       }
     } catch {
-      alert("Serveur IA inaccessible. Vérifiez que python serveur_ia.py tourne.");
+      alert("Serveur IA inaccessible. Vérifiez que le service IA est en ligne sur Railway.");
     } finally {
       setChargement(false);
     }
@@ -385,15 +397,13 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
 
   async function analyserTous() {
     setChargement(true);
-    const resultats = [];
-    for (const equip of equipements) {
-      try {
-        const r = await fetch(`${API_IA}/prediction/${equip.id}`);
-        if (r.ok) resultats.push(await r.json());
-      } catch {}
+    try {
+      const r = await fetch(`${API_IA}/predictions`, {headers: enTetesIA()});
+      if (r.ok) { setPredictions(await r.json()); setErreurIA(""); }
+      else setErreurIA(await lireErreur(r));
+    } catch {
+      setErreurIA("Serveur IA inaccessible.");
     }
-    resultats.sort((a,b) => b.probabilite_panne - a.probabilite_panne);
-    setPredictions(resultats);
     chargerStats();
     setChargement(false);
   }
@@ -403,15 +413,9 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
       <div style={{fontSize:56, marginBottom:16}}>🤖</div>
       <div style={{fontSize:20, fontWeight:700, color:"white", marginBottom:8}}>Serveur IA non connecté</div>
       <div style={{fontSize:14, color:"#475569", marginBottom:24, maxWidth:400, margin:"0 auto 24px"}}>
-        Le serveur IA Python n'est pas démarré. Ouvrez un nouveau CMD et tapez :
+        Le serveur IA (service « perpetual-strength » sur Railway) ne répond pas.
+        Vérifiez qu'il est en ligne, puis réessayez.
       </div>
-      <div style={{background:"rgba(0,0,0,0.4)", borderRadius:8, padding:"12px 20px", display:"inline-block", marginBottom:24}}>
-        <code style={{color:"#00D4AA", fontSize:14}}>
-          cd Desktop\plateforme-biomedicale\ia<br/>
-          python serveur_ia.py
-        </code>
-      </div>
-      <br/>
       <button style={S.btnSolid()} onClick={verifierIA}>🔄 Réessayer la connexion</button>
     </div>
   );
@@ -424,7 +428,10 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
           <div style={{width:12, height:12, borderRadius:"50%", background:"#00D4AA", boxShadow:"0 0 8px #00D4AA"}}/>
           <div>
             <div style={{fontWeight:700, color:"white", fontSize:15}}>🤖 Serveur IA connecté</div>
-            <div style={{fontSize:12, color:"#475569"}}>{API_IA} — Modèle : {statsIA ? "Actif" : "En attente"}</div>
+            <div style={{fontSize:12, color:"#475569"}}>
+              {statsIA?.organisation ? `Organisation : ${statsIA.organisation} — ` : ""}
+              Modèle : {statsIA?.modele_entraine ? `RandomForest entraîné sur ${statsIA.modele_nb_equipements} équipement(s)` : "non entraîné (méthode heuristique)"}
+            </div>
           </div>
         </div>
         <div style={{display:"flex", gap:12, flexWrap:"wrap"}}>
@@ -436,6 +443,12 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
           </button>
         </div>
       </div>
+
+      {erreurIA && (
+        <div style={{background:"rgba(255,77,109,0.1)",border:"1px solid rgba(255,77,109,0.3)",borderRadius:8,padding:"10px 14px",marginBottom:16,color:"#FF4D6D",fontSize:13}}>
+          ❌ {erreurIA}
+        </div>
+      )}
 
       {/* Stats globales */}
       {statsIA && (
