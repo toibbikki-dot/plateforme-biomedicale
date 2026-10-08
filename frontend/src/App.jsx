@@ -1142,7 +1142,7 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
   );
 });
 
-const Maintenances = memo(({maintenances,equipements,ajouterMaintenance})=>{
+const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerStatutMaintenance})=>{
   const [showForm,setShowForm]=useState(false);
   const [form,setForm]=useState({equipementId:"",type:"Préventive",statut:"Planifiée",datePlanifiee:"",technicien:"",description:""});
   function sauvegarder(){ajouterMaintenance(form,()=>{setShowForm(false);setForm({equipementId:"",type:"Préventive",statut:"Planifiée",datePlanifiee:"",technicien:"",description:""});});}
@@ -1151,7 +1151,7 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance})=>{
       <div style={{marginBottom:20}}><button style={S.btn()} onClick={()=>setShowForm(true)}>+ Planifier une maintenance</button></div>
       <div style={S.card}>
         <table style={S.tbl}>
-          <thead><tr>{["Équipement","Type","Date","Technicien","Description","Statut"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <thead><tr>{["Équipement","Type","Date","Technicien","Description","Statut","Action"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
           <tbody>
             {maintenances.map(m=>(
               <tr key={m.id}>
@@ -1161,6 +1161,18 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance})=>{
                 <td style={S.td}>{m.technicien||"—"}</td>
                 <td style={{...S.td,color:"#475569"}}>{m.description}</td>
                 <td style={S.td}><span style={badge(m.statut)}>{m.statut}</span></td>
+                <td style={S.td}>
+                  {m.statut==="Planifiée"&&(
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      <button style={{...S.btn("#F59E0B"),fontSize:11,padding:"4px 10px"}} onClick={()=>changerStatutMaintenance(m,"En cours")}>▶️ Démarrer</button>
+                      <button style={{...S.btn("#00D4AA"),fontSize:11,padding:"4px 10px"}} onClick={()=>changerStatutMaintenance(m,"Terminée")}>✅ Terminer</button>
+                    </div>
+                  )}
+                  {m.statut==="En cours"&&(
+                    <button style={{...S.btn("#00D4AA"),fontSize:11,padding:"4px 10px"}} onClick={()=>changerStatutMaintenance(m,"Terminée")}>✅ Terminer</button>
+                  )}
+                  {m.statut==="Terminée"&&<span style={{fontSize:11,color:"#475569"}}>{m.dateTerminee?`Terminée le ${formaterDate(m.dateTerminee)}`:"—"}</span>}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1344,7 +1356,18 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout}){
   async function toggleMonitoring(){const n=!monitoringActif;setMonitoringActif(n);const p={monitoring_actif:n?1:0,monitoring_equip_id:iotEquipId};localStorage.setItem("preferences",JSON.stringify(p));try{await fetch(`${API}/preferences/monitoring`,{method:"POST",headers:hdrs(),body:JSON.stringify(p)});}catch{}toast(n?"▶️ Monitoring activé":"⏹️ Monitoring désactivé");}
   async function changerEquipMonitoring(id){setIotEquipId(id);const p={monitoring_actif:monitoringActif?1:0,monitoring_equip_id:id};localStorage.setItem("preferences",JSON.stringify(p));try{await fetch(`${API}/preferences/monitoring`,{method:"POST",headers:hdrs(),body:JSON.stringify(p)});}catch{}}
   async function supprimerEquipement(id){if(!window.confirm("⚠️ Attention : supprimer cet équipement supprimera aussi définitivement toutes ses maintenances, alertes et données IoT associées.\n\nConfirmer la suppression ?")) return;await fetch(`${API}/equipements/${id}`,{method:"DELETE",headers:hdrs()});setEquipements(p=>p.filter(e=>e.id!==id));toast("✅ Équipement supprimé.");}
-  async function ajouterMaintenance(form,onSuccess){if(!form.equipementId||!form.datePlanifiee){toast("⚠️ Équipement et date obligatoires.","e");return;}const eq=equipements.find(e=>e.id===parseInt(form.equipementId));try{const r=await fetch(`${API}/maintenances`,{method:"POST",headers:hdrs(),body:JSON.stringify({...form,equipementNom:eq?.nom})});const m=await r.json();setMaintenances(p=>[m,...p]);onSuccess();toast("✅ Maintenance planifiée !");}catch{toast("❌ Erreur","e");}}
+  async function ajouterMaintenance(form,onSuccess){if(!form.equipementId||!form.datePlanifiee){toast("⚠️ Équipement et date obligatoires.","e");return;}const eq=equipements.find(e=>e.id===parseInt(form.equipementId));try{const r=await fetch(`${API}/maintenances`,{method:"POST",headers:hdrs(),body:JSON.stringify({...form,equipementId:parseInt(form.equipementId),equipementNom:eq?.nom})});const m=await r.json();if(!r.ok){toast("❌ "+(m.erreur||"Erreur"),"e");return;}setMaintenances(p=>[m,...p]);onSuccess();toast("✅ Maintenance planifiée !");rafraichirEnDirect();}catch{toast("❌ Erreur","e");}}
+  async function changerStatutMaintenance(m,statut){
+    if(statut==="Terminée"&&!window.confirm(`Marquer la maintenance de « ${m.equipementNom} » comme terminée ?\n\nL'équipement repassera « En service » et son score de risque sera recalculé (les pannes et anomalies antérieures ne compteront plus).`)) return;
+    try{
+      const r=await fetch(`${API}/maintenances/${m.id}/statut`,{method:"PATCH",headers:hdrs(),body:JSON.stringify({statut})});
+      const d=await r.json();
+      if(!r.ok){toast("❌ "+(d.erreur||"Erreur"),"e");return;}
+      setMaintenances(p=>p.map(x=>x.id===m.id?d.maintenance:x));
+      if(d.equipement) setEquipements(p=>p.map(e=>e.id===d.equipement.id?{...e,statut:d.equipement.statut,scoreRisque:d.equipement.scoreRisque}:e));
+      toast(statut==="Terminée"?`✅ Maintenance terminée — risque de ${m.equipementNom} : ${d.equipement?.scoreRisque??0}%`:"▶️ Maintenance démarrée — équipement « En maintenance »");
+    }catch{toast("❌ Erreur réseau","e");}
+  }
   async function ajouterUtilisateur(form,onSuccess){if(!form.nom||!form.email||!form.password){toast("⚠️ Champs obligatoires.","e");return;}try{const r=await fetch(`${API}/utilisateurs`,{method:"POST",headers:hdrs(),body:JSON.stringify(form)});if(!r.ok){const e=await r.json();toast("❌ "+e.erreur,"e");return;}onSuccess();charger();toast("✅ Utilisateur créé !");}catch{toast("❌ Erreur","e");}}
   async function desactiverUtilisateur(id){if(!window.confirm("Désactiver ?")) return;await fetch(`${API}/utilisateurs/${id}/desactiver`,{method:"PATCH",headers:hdrs()});charger();toast("✅ Désactivé.");}
   async function reactiverUtilisateur(id){if(!window.confirm("Réactiver ?")) return;await fetch(`${API}/utilisateurs/${id}/reactiver`,{method:"PATCH",headers:hdrs()});charger();toast("✅ Réactivé !");}
@@ -1446,7 +1469,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout}){
         <div style={S.sub}>{titres[onglet]?.sub}</div>
         {onglet==="dashboard"&&<Dashboard equipements={equipements} maintenances={maintenances} pieStatuts={pieStatuts} barServices={barServices} pieMaint={pieMaint} total={total} serv={serv} maint={maint} panne={panne} dispo={dispo} crit={crit} exportPDF={exportPDF} setOnglet={setOnglet}/>}
         {onglet==="equipements"&&<Equipements equipements={equipements} peutModifier={peutModifier} supprimerEquipement={supprimerEquipement} changerEquipMonitoring={changerEquipMonitoring} setOnglet={setOnglet} token={token} charger={charger}/>}
-        {onglet==="maintenances"&&<Maintenances maintenances={maintenances} equipements={equipements} ajouterMaintenance={ajouterMaintenance}/>}
+        {onglet==="maintenances"&&<Maintenances maintenances={maintenances} equipements={equipements} ajouterMaintenance={ajouterMaintenance} changerStatutMaintenance={changerStatutMaintenance}/>}
         {onglet==="calendrier"&&<Calendrier maintenances={maintenances}/>}
         {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring} token={token} peutModifier={peutModifier}/>}
         {onglet==="ia"&&<ModuleIA equipements={equipements} token={token} setOnglet={setOnglet}/>}

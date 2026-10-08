@@ -173,6 +173,66 @@ db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_equipements_cle ON equipements(cl
 }
 
 // ════════════════════════════════════════════════════════════
+// MIGRATION — Date de fin des maintenances
+// ════════════════════════════════════════════════════════════
+{
+  const colsMaint = db.prepare("PRAGMA table_info(maintenances)").all().map(c => c.name);
+  if (!colsMaint.includes("dateTerminee")) {
+    db.exec("ALTER TABLE maintenances ADD COLUMN dateTerminee TEXT");
+    // Les maintenances déjà terminées comptent à partir de leur création
+    db.exec("UPDATE maintenances SET dateTerminee=createdAt WHERE statut='Terminée' AND dateTerminee IS NULL");
+    console.log("✅ Colonne dateTerminee ajoutée");
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// SCORE DE RISQUE — recalculé (et non additionné à l'infini)
+// Fenêtre : événements depuis la dernière maintenance terminée,
+// sur 30 jours au maximum.
+//   Équipement en panne actuellement ........ +40
+//   Chaque panne signalée ................... +15 (max 45)
+//   Chaque anomalie de seuil ................ +5  (max 20)
+//   Chaque maintenance corrective (90 jours)  +10 (max 30)
+// Total plafonné à 100.
+// ════════════════════════════════════════════════════════════
+const REGLE_SCORE = { enPanne: 40, parPanne: 15, maxPannes: 45, parAnomalie: 5, maxAnomalies: 20, parCorrective: 10, maxCorrectives: 30, joursEvenements: 30, joursCorrectives: 90 };
+
+const sqlDebutFenetre = `
+  SELECT MAX(datetime('now','localtime','-${REGLE_SCORE.joursEvenements} days'),
+             COALESCE((SELECT MAX(dateTerminee) FROM maintenances WHERE equipementId=? AND statut='Terminée'), '0')) AS debut`;
+
+function detailScore(equipementId) {
+  const equip = db.prepare("SELECT id, statut FROM equipements WHERE id=?").get(equipementId);
+  if (!equip) return null;
+  const { debut } = db.prepare(sqlDebutFenetre).get(equipementId);
+  const pannes = db.prepare("SELECT COUNT(*) AS n FROM alertes WHERE equipement_id=? AND type='PANNE' AND createdAt > ?").get(equipementId, debut).n;
+  const anomalies = db.prepare("SELECT COUNT(*) AS n FROM alertes WHERE equipement_id=? AND type='ANOMALIE' AND createdAt > ?").get(equipementId, debut).n;
+  const correctives = db.prepare(`SELECT COUNT(*) AS n FROM maintenances WHERE equipementId=? AND type='Corrective' AND createdAt > datetime('now','localtime','-${REGLE_SCORE.joursCorrectives} days')`).get(equipementId).n;
+  const R = REGLE_SCORE;
+  const points = {
+    en_panne: equip.statut === "En panne" ? R.enPanne : 0,
+    pannes: Math.min(R.maxPannes, pannes * R.parPanne),
+    anomalies: Math.min(R.maxAnomalies, anomalies * R.parAnomalie),
+    correctives: Math.min(R.maxCorrectives, correctives * R.parCorrective),
+  };
+  const score = Math.min(100, points.en_panne + points.pannes + points.anomalies + points.correctives);
+  return { score, depuis: debut, nb_pannes: pannes, nb_anomalies: anomalies, nb_correctives: correctives, points };
+}
+
+function recalculerScore(equipementId) {
+  const d = detailScore(equipementId);
+  if (!d) return null;
+  db.prepare("UPDATE equipements SET scoreRisque=? WHERE id=?").run(d.score, equipementId);
+  return d.score;
+}
+
+function recalculerTousLesScores() {
+  const ids = db.prepare("SELECT id FROM equipements").all();
+  for (const { id } of ids) recalculerScore(id);
+  return ids.length;
+}
+
+// ════════════════════════════════════════════════════════════
 // UTILITAIRES
 // ════════════════════════════════════════════════════════════
 function genererCleAppareil() {
@@ -377,7 +437,7 @@ app.post("/api/capteurs", (req, res) => {
       // (et non une alerte toutes les 5 secondes tant qu'elle dure)
       if (enPanne && !etaitEnPanne) {
         db.prepare("INSERT INTO alertes (organisation_id,equipement_id,type,severite,message,source) VALUES (?,?,'PANNE','CRITIQUE','Panne signalée par capteur','IOT')").run(equip.organisation_id, equip.id);
-        db.prepare("UPDATE equipements SET scoreRisque=MIN(100,scoreRisque+15), statut='En panne' WHERE id=?").run(equip.id);
+        db.prepare("UPDATE equipements SET statut='En panne' WHERE id=?").run(equip.id);
       }
 
       // Panne résolue sur l'appareil : l'équipement repasse en service
@@ -389,13 +449,15 @@ app.post("/api/capteurs", (req, res) => {
       // Nouvelle anomalie (valeur hors seuils) : une seule alerte au début
       if (enAnomalie && !etaitEnAnomalie) {
         db.prepare("INSERT INTO alertes (organisation_id,equipement_id,type,severite,message,source) VALUES (?,?,'ANOMALIE','MOYENNE',?,'IOT')").run(equip.organisation_id, equip.id, "Valeur hors seuil — " + depassements.join(" ; "));
-        db.prepare("UPDATE equipements SET scoreRisque=MIN(100,scoreRisque+5) WHERE id=?").run(equip.id);
       }
 
       // Toutes les valeurs sont revenues dans leurs seuils
       if (!enAnomalie && etaitEnAnomalie) {
         db.prepare("INSERT INTO alertes (organisation_id,equipement_id,type,severite,message,source) VALUES (?,?,'RETOUR_NORMAL','INFO','Toutes les mesures sont revenues dans leurs seuils','IOT')").run(equip.organisation_id, equip.id);
       }
+
+      // Le score de risque est recalculé à partir des événements récents
+      if ((enPanne !== etaitEnPanne) || (enAnomalie && !etaitEnAnomalie)) recalculerScore(equip.id);
     });
     enregistrer();
     res.json({
@@ -528,12 +590,57 @@ app.get("/api/maintenances", (req, res) => {
   catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
+const STATUTS_MAINTENANCE = ["Planifiée", "En cours", "Terminée"];
+
+// Effet d'un statut de maintenance sur l'équipement concerné, puis recalcul du score
+function appliquerStatutMaintenance(equipementId, statut) {
+  if (statut === "En cours") {
+    db.prepare("UPDATE equipements SET statut='En maintenance' WHERE id=?").run(equipementId);
+  } else if (statut === "Terminée") {
+    db.prepare("UPDATE equipements SET statut='En service' WHERE id=? AND statut IN ('En panne','En maintenance')").run(equipementId);
+  }
+  recalculerScore(equipementId);
+}
+
 app.post("/api/maintenances", (req, res) => {
   const { equipementId, equipementNom, type, statut, datePlanifiee, technicien, description } = req.body;
+  const st = STATUTS_MAINTENANCE.includes(statut) ? statut : "Planifiée";
+  // Cloisonnement : l'équipement doit appartenir à l'organisation
+  if (!db.prepare("SELECT id FROM equipements WHERE id=? AND organisation_id=?").get(equipementId, req.user.organisation_id))
+    return res.status(404).json({ erreur: "Équipement introuvable dans votre organisation" });
   try {
-    const result = db.prepare("INSERT INTO maintenances (organisation_id,equipementId,equipementNom,type,statut,datePlanifiee,technicien,description) VALUES (?,?,?,?,?,?,?,?)").run(req.user.organisation_id, equipementId, equipementNom, type||"Préventive", statut||"Planifiée", datePlanifiee, technicien, description);
-    res.json({ id: result.lastInsertRowid, organisation_id: req.user.organisation_id, equipementId, equipementNom, type, statut, datePlanifiee, technicien, description });
+    const creer = db.transaction(() => {
+      const result = db.prepare("INSERT INTO maintenances (organisation_id,equipementId,equipementNom,type,statut,datePlanifiee,technicien,description,dateTerminee) VALUES (?,?,?,?,?,?,?,?, CASE WHEN ?='Terminée' THEN datetime('now','localtime') ELSE NULL END)")
+        .run(req.user.organisation_id, equipementId, equipementNom, type||"Préventive", st, datePlanifiee, technicien, description, st);
+      appliquerStatutMaintenance(equipementId, st);
+      return result.lastInsertRowid;
+    });
+    const id = creer();
+    res.json(db.prepare("SELECT * FROM maintenances WHERE id=?").get(id));
   } catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
+// Faire avancer une maintenance : Planifiée → En cours → Terminée
+app.patch("/api/maintenances/:id/statut", (req, res) => {
+  const { statut } = req.body;
+  if (!STATUTS_MAINTENANCE.includes(statut)) return res.status(400).json({ erreur: "Statut invalide (Planifiée, En cours ou Terminée)" });
+  const maint = db.prepare("SELECT * FROM maintenances WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id);
+  if (!maint) return res.status(404).json({ erreur: "Maintenance introuvable dans votre organisation" });
+  try {
+    db.transaction(() => {
+      db.prepare("UPDATE maintenances SET statut=?, dateTerminee=CASE WHEN ?='Terminée' THEN datetime('now','localtime') ELSE NULL END WHERE id=?").run(statut, statut, maint.id);
+      if (maint.equipementId) appliquerStatutMaintenance(maint.equipementId, statut);
+    })();
+    const equip = maint.equipementId ? db.prepare("SELECT id, statut, scoreRisque FROM equipements WHERE id=?").get(maint.equipementId) : null;
+    res.json({ maintenance: db.prepare("SELECT * FROM maintenances WHERE id=?").get(maint.id), equipement: equip });
+  } catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
+// Détail du score de risque d'un équipement (d'où viennent les points)
+app.get("/api/equipements/:id/score", (req, res) => {
+  if (!db.prepare("SELECT id FROM equipements WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id))
+    return res.status(404).json({ erreur: "Équipement introuvable dans votre organisation" });
+  res.json(detailScore(req.params.id));
 });
 
 app.get("/api/alertes", (req, res) => {
@@ -590,6 +697,11 @@ app.get("/api/organisation", (req, res) => {
   try { res.json(db.prepare("SELECT id,nom,type,code_invitation FROM organisations WHERE id=?").get(req.user.organisation_id)); }
   catch (err) { res.status(500).json({ erreur: err.message }); }
 });
+
+// Recalcul des scores au démarrage (corrige les anciens scores additionnés)
+// puis toutes les heures (les événements de plus de 30 jours cessent de compter)
+console.log(`✅ Scores de risque recalculés pour ${recalculerTousLesScores()} équipement(s)`);
+setInterval(() => { try { recalculerTousLesScores(); } catch (e) { console.error("Recalcul des scores :", e.message); } }, 60 * 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`🚀 Serveur backend démarré sur le port ${PORT}`);
