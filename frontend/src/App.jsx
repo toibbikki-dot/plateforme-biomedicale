@@ -1350,8 +1350,14 @@ export default function App(){
   },[]);
   function gererConnexion(u,t,p,o){setUser(u);setToken(t);setPreferences(p);setOrganisation(o||null);}
   if(!user||!token){
-    if(ecran==="inscription") return <PageInscription onLogin={gererConnexion} onRetourConnexion={()=>setEcran("connexion")}/>;
-    return <PageConnexion onLogin={gererConnexion} onGoToInscription={()=>setEcran("inscription")}/>;
+    // Choix du thème disponible avant la connexion (coin supérieur droit)
+    const choixTheme=(
+      <div style={{position:"fixed",top:16,right:16,zIndex:50,background:"var(--panel-bg)",border:"1px solid var(--w06)",borderRadius:12,padding:"8px 12px 0",boxShadow:"var(--shadow)"}}>
+        <SelecteurTheme/>
+      </div>
+    );
+    if(ecran==="inscription") return <>{choixTheme}<PageInscription onLogin={gererConnexion} onRetourConnexion={()=>setEcran("connexion")}/></>;
+    return <>{choixTheme}<PageConnexion onLogin={gererConnexion} onGoToInscription={()=>setEcran("inscription")}/></>;
   }
   return <Plateforme user={user} token={token} organisation={organisation} prefInitiales={preferences} onMajUtilisateur={u=>{setUser(u);localStorage.setItem("user",JSON.stringify(u));}} onLogout={()=>{localStorage.clear();setUser(null);setToken(null);setOrganisation(null);setEcran("connexion");}}/>;
 }
