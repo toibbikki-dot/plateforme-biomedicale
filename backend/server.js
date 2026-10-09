@@ -265,6 +265,14 @@ function completerCodesIngenieur() {
     );
     CREATE INDEX IF NOT EXISTS idx_fiches_org ON fiches_intervention(organisation_id);
   `);
+  // Suppression « douce » : la fiche disparaît de l'archive mais reste en base,
+  // et son numéro n'est jamais réattribué.
+  const colsFiches = db.prepare("PRAGMA table_info(fiches_intervention)").all().map(c => c.name);
+  if (!colsFiches.includes("supprime")) {
+    db.exec("ALTER TABLE fiches_intervention ADD COLUMN supprime INTEGER DEFAULT 0");
+    db.exec("ALTER TABLE fiches_intervention ADD COLUMN supprime_par_nom TEXT");
+    db.exec("ALTER TABLE fiches_intervention ADD COLUMN supprime_le TEXT");
+  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -824,14 +832,25 @@ app.post("/api/maintenances/:id/terminer", (req, res) => {
 
 // Archive des fiches d'intervention de l'organisation
 app.get("/api/fiches", (req, res) => {
-  try { res.json(db.prepare("SELECT * FROM fiches_intervention WHERE organisation_id=? ORDER BY id DESC").all(req.user.organisation_id)); }
+  try { res.json(db.prepare("SELECT * FROM fiches_intervention WHERE organisation_id=? AND COALESCE(supprime,0)=0 ORDER BY id DESC").all(req.user.organisation_id)); }
   catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
 app.get("/api/fiches/:id", (req, res) => {
-  const f = db.prepare("SELECT * FROM fiches_intervention WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id);
+  const f = db.prepare("SELECT * FROM fiches_intervention WHERE id=? AND organisation_id=? AND COALESCE(supprime,0)=0").get(req.params.id, req.user.organisation_id);
   if (!f) return res.status(404).json({ erreur: "Fiche introuvable dans votre organisation" });
   res.json(f);
+});
+
+// Supprimer une fiche de l'archive : administrateurs uniquement (propriétaire + adjoints)
+app.delete("/api/fiches/:id", requireAdmin, (req, res) => {
+  try {
+    const auteur = db.prepare("SELECT prenom, nom FROM utilisateurs WHERE id=?").get(req.user.id) || {};
+    const ok = db.prepare("UPDATE fiches_intervention SET supprime=1, supprime_par_nom=?, supprime_le=datetime('now','localtime') WHERE id=? AND organisation_id=? AND COALESCE(supprime,0)=0")
+      .run(`${auteur.prenom || ""} ${auteur.nom || ""}`.trim(), req.params.id, req.user.organisation_id).changes > 0;
+    if (!ok) return res.status(404).json({ erreur: "Fiche introuvable dans votre organisation" });
+    res.json({ supprime: true });
+  } catch (err) { res.status(500).json({ erreur: err.message }); }
 });
 
 // Détail du score de risque d'un équipement (d'où viennent les points)

@@ -1450,7 +1450,7 @@ function ModalFiche({maint,equipement,organisation,user,telephoneParDefaut,onAnn
 }
 
 // ── Archive des interventions : toutes les fiches enregistrées ──
-const Archives = memo(({fiches})=>{
+const Archives = memo(({fiches,estAdmin,supprimerFiche})=>{
   const [recherche,setRecherche]=useState("");
   const [tri,setTri]=useTri("archives","date_desc",TRIS_FICHE);
   const r=recherche.toLowerCase().trim();
@@ -1475,7 +1475,9 @@ const Archives = memo(({fiches})=>{
                 <td style={S.td}><div>{f.lieu||"—"}</div><div style={{fontSize:11,color:"var(--muted-3)"}}>{f.type_maintenance}</div></td>
                 <td style={S.td}>{f.technicien_nom}</td>
                 <td style={S.td}><span style={{color:f.etat_final==="Fonctionnel"?"#00D4AA":"#FF4D6D",fontWeight:700,fontSize:12,whiteSpace:"nowrap"}}>{f.etat_final==="Fonctionnel"?"✅ Fonctionnel":"❌ Non fonctionnel"}</span></td>
-                <td style={S.td}><button style={{...S.btn("#A78BFA"),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}} onClick={()=>telechargerPdfFiche(f)} title={`Télécharger la fiche ${f.numero}`}>📄 PDF</button></td>
+                <td style={S.td}><button style={{...S.btn("#A78BFA"),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}} onClick={()=>telechargerPdfFiche(f)} title={`Télécharger la fiche ${f.numero}`}>📄 PDF</button>
+                  {estAdmin&&<button onClick={()=>supprimerFiche(f)} title="Supprimer cette fiche de l'archive" style={{marginLeft:6,background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>🗑️</button>}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1694,6 +1696,16 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
       return null;
     }catch{return "Erreur réseau : la fiche n'a pas été enregistrée.";}
   }
+  async function supprimerFiche(f){
+    if(!window.confirm(`Supprimer la fiche ${f.numero} (${f.equipement_nom}) de l'archive ?\n\nElle ne sera plus visible ni téléchargeable. Son numéro ne sera pas réattribué.`)) return;
+    try{
+      const r=await fetch(`${API}/fiches/${f.id}`,{method:"DELETE",headers:hdrs()});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok){toast("❌ "+(d.erreur||"Suppression impossible"),"e");return;}
+      setFiches(p=>p.filter(x=>x.id!==f.id));
+      toast(`🗑️ Fiche ${f.numero} supprimée de l'archive`);
+    }catch{toast("❌ Erreur réseau","e");}
+  }
   async function changerStatutMaintenance(m,statut){
     if(statut==="Terminée"){setFicheEnCours(m);return;}
     try{
@@ -1817,7 +1829,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
         {onglet==="dashboard"&&<Dashboard equipements={equipements} maintenances={maintenances} pieStatuts={pieStatuts} barServices={barServices} pieMaint={pieMaint} total={total} serv={serv} maint={maint} panne={panne} dispo={dispo} crit={crit} exportPDF={exportPDF} setOnglet={setOnglet}/>}
         {onglet==="equipements"&&<Equipements equipements={equipements} peutModifier={peutModifier} supprimerEquipement={supprimerEquipement} changerEquipMonitoring={changerEquipMonitoring} setOnglet={setOnglet} token={token} charger={charger}/>}
         {onglet==="maintenances"&&<Maintenances maintenances={maintenances} equipements={equipements} ajouterMaintenance={ajouterMaintenance} changerStatutMaintenance={changerStatutMaintenance} fiches={fiches}/>}
-        {onglet==="archives"&&<Archives fiches={fiches}/>}
+        {onglet==="archives"&&<Archives fiches={fiches} estAdmin={estAdmin} supprimerFiche={supprimerFiche}/>}
         {onglet==="calendrier"&&<Calendrier maintenances={maintenances}/>}
         {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring} token={token} peutModifier={peutModifier}/>}
         {onglet==="ia"&&<ModuleIA equipements={equipements} token={token} setOnglet={setOnglet}/>}

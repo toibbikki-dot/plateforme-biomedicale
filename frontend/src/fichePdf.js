@@ -121,5 +121,8 @@ export function creerPdfFiche(f) {
 
 export function telechargerPdfFiche(f) {
   const doc = creerPdfFiche(f);
-  doc.save(`fiche_${nomFichier(f.numero)}_${nomFichier(f.equipement_nom)}.pdf`);
+  // Ex. : fiche_FI-2026-0001_Radiologie_mobile_09-10-2026_Sidi_Moctar_ZONGO.pdf
+  const date = formaterDateHeure(f.date_fin || f.createdAt).slice(0, 10).replace(/\//g, "-");
+  const morceaux = ["fiche", nomFichier(f.numero), nomFichier(f.equipement_nom), date, nomFichier(f.technicien_nom)].filter(Boolean);
+  doc.save(`${morceaux.join("_")}.pdf`);
 }
