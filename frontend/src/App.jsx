@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, RadialBarChart, RadialBar } from "recharts";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { telechargerPdfFiche, formaterDateHeure, nomFichier } from "./fichePdf";
+import { creerRapport, SECTIONS_RAPPORT, PERIODES_RAPPORT } from "./rapportPdf";
 
 const API    = "https://plateforme-biomedicale-production.up.railway.app/api";
 const API_IA = "https://plateforme-biomedicale-production-e0bf.up.railway.app/ia";
@@ -1449,6 +1448,46 @@ function ModalFiche({maint,equipement,organisation,user,telephoneParDefaut,onAnn
   );
 }
 
+// ── Export du rapport PDF : choix de la période et des parties ──
+function ModalExport({onAnnuler,onGenerer}){
+  const lire=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v??d;}catch{return d;}};
+  const [periode,setPeriode]=useState(()=>{const v=lire("rapport_periode","30");return PERIODES_RAPPORT.some(p=>p.id===v)?v:"30";});
+  const [choix,setChoix]=useState(()=>{const v=lire("rapport_sections",null);return Array.isArray(v)?v.filter(id=>SECTIONS_RAPPORT.some(s=>s.id===id)):SECTIONS_RAPPORT.map(s=>s.id);});
+  const basculer=id=>setChoix(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  function generer(){
+    try{localStorage.setItem("rapport_periode",JSON.stringify(periode));localStorage.setItem("rapport_sections",JSON.stringify(choix));}catch{}
+    onGenerer(periode,SECTIONS_RAPPORT.map(s=>s.id).filter(id=>choix.includes(id)));
+  }
+  return(
+    <div style={S.overlay}>
+      <div style={{...S.modal,maxWidth:520}}>
+        <h3 style={{marginBottom:4,color:"var(--text)",fontSize:18}}>📄 Exporter le rapport PDF</h3>
+        <div style={{fontSize:12,color:"var(--muted)",marginBottom:16}}>Choisissez la période et les parties à inclure. Une page de garde est toujours ajoutée.</div>
+        <label style={S.lbl}>Période</label>
+        <select style={{...S.sel,marginBottom:16}} value={periode} onChange={e=>setPeriode(e.target.value)}>
+          {PERIODES_RAPPORT.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
+        <label style={S.lbl}>Parties du rapport</label>
+        <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+          {SECTIONS_RAPPORT.map(sct=>(
+            <label key={sct.id} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:13,color:"var(--text-2)",padding:"6px 10px",borderRadius:8,background:choix.includes(sct.id)?"rgba(0,212,170,0.08)":"var(--w02)",border:"1px solid var(--w05)"}}>
+              <input type="checkbox" checked={choix.includes(sct.id)} onChange={()=>basculer(sct.id)}/>{sct.label}
+            </label>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:16,fontSize:12}}>
+          <button type="button" style={{...S.btnO,padding:"4px 10px",fontSize:12}} onClick={()=>setChoix(SECTIONS_RAPPORT.map(s=>s.id))}>Tout cocher</button>
+          <button type="button" style={{...S.btnO,padding:"4px 10px",fontSize:12}} onClick={()=>setChoix([])}>Tout décocher</button>
+        </div>
+        <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
+          <button style={S.btnO} onClick={onAnnuler}>Annuler</button>
+          <button style={S.btnSolid()} onClick={generer} disabled={choix.length===0}>📄 Générer le PDF</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Archive des interventions : toutes les fiches enregistrées ──
 const Archives = memo(({fiches,estAdmin,supprimerFiche})=>{
   const [recherche,setRecherche]=useState("");
@@ -1724,27 +1763,13 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
   async function reactiverUtilisateur(id){if(!window.confirm("Réactiver ?")) return;const rr=await fetch(`${API}/utilisateurs/${id}/reactiver`,{method:"PATCH",headers:hdrs()});if(!rr.ok){const e=await rr.json().catch(()=>({}));toast("❌ "+(e.erreur||"Erreur"),"e");return;}charger();toast("✅ Réactivé !");}
   async function lireAlerte(id){await fetch(`${API}/alertes/${id}/lire`,{method:"PATCH",headers:hdrs()});setAlertes(p=>p.map(a=>a.id===id?{...a,estLue:1}:a));}
 
-  function exportPDF(){
-    const doc=new jsPDF();const now=new Date().toLocaleDateString("fr-FR");
-    const total=equipements.length,serv=equipements.filter(e=>e.statut==="En service").length;
-    const maint=equipements.filter(e=>e.statut==="En maintenance").length,panne=equipements.filter(e=>e.statut==="En panne").length;
-    const dispo=total>0?Math.round(serv/total*100):0,crit=equipements.filter(e=>e.scoreRisque>=75).length;
-    doc.setFillColor(2,11,24);doc.rect(0,0,210,35,"F");
-    doc.setTextColor(255,255,255);doc.setFontSize(18);doc.setFont("helvetica","bold");
-    doc.text("Rapport Parc Biomedical",14,15);
-    doc.setFontSize(10);doc.setFont("helvetica","normal");
-    const auteur=`${user.prenom||""} ${user.nom||""}`.trim();
-    doc.text(`${organisation?.nom||""}`,14,25);
-    doc.text(`Exporté le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})} par ${auteur} (${user.role})`,14,31);
-    doc.setTextColor(2,11,24);doc.setFontSize(13);doc.setFont("helvetica","bold");
-    doc.text("Indicateurs cles",14,48);
-    autoTable(doc,{startY:53,head:[["Indicateur","Valeur"]],body:[["Total",total],["En service",serv],["En maintenance",maint],["En panne",panne],["Disponibilite",dispo+"%"],["Risque critique",crit]],theme:"grid",headStyles:{fillColor:[0,40,30],textColor:255}});
-    doc.text("Equipements",14,doc.lastAutoTable.finalY+12);
-    autoTable(doc,{startY:doc.lastAutoTable.finalY+17,head:[["Nom","Marque","N Serie","Service","Statut","Risque"]],body:equipements.map(e=>[e.nom,e.marque||"-",e.numeroSerie,e.service||"-",e.statut,e.scoreRisque+"%"]),theme:"striped",headStyles:{fillColor:[0,40,30],textColor:255},styles:{fontSize:9}});
-    const nbPages=doc.getNumberOfPages();
-    for(let i=1;i<=nbPages;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(120);doc.text(`Rapport exporté par ${auteur} — page ${i}/${nbPages}`,105,290,{align:"center"});}
-    doc.save(`rapport_biomedical_${now.replace(/\//g,"-")}_${nomFichier(auteur)||"utilisateur"}.pdf`);
-    toast("✅ PDF exporté !");
+  const [showExport,setShowExport]=useState(false);
+  function exportPDF(){setShowExport(true);}
+  function genererRapport(periodeId,sections){
+    try{
+      const {doc,nomFichier:nf}=creerRapport({organisation,user,equipements,maintenances,fiches,alertes,periodeId,sections});
+      doc.save(nf);setShowExport(false);toast("✅ Rapport PDF exporté !");
+    }catch(e){toast("❌ Erreur lors de la création du PDF","e");console.error(e);}
   }
 
   const total=equipements.length,serv=equipements.filter(e=>e.statut==="En service").length;
@@ -1796,6 +1821,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
     <div style={{...S.app,position:"relative"}}>
       <AnimatedBackground/>
       {message&&<div style={S.toast(message.type)}>{message.t}</div>}
+      {showExport&&<ModalExport onAnnuler={()=>setShowExport(false)} onGenerer={genererRapport}/>}
       {ficheEnCours&&<ModalFiche maint={ficheEnCours} equipement={equipements.find(e=>e.id===ficheEnCours.equipementId)} organisation={organisation} user={user} telephoneParDefaut={fiches[0]?.telephone||""} onAnnuler={()=>setFicheEnCours(null)} onValider={terminerAvecFiche}/>}
       <div style={S.sidebar}>
         <div style={S.sidebarTop}>
