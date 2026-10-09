@@ -2,6 +2,12 @@ import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, RadialBarChart, RadialBar } from "recharts";
 import { telechargerPdfFiche, formaterDateHeure, nomFichier } from "./fichePdf";
 import { creerRapport, SECTIONS_RAPPORT, PERIODES_RAPPORT } from "./rapportPdf";
+import { chargerLogoPdf } from "./fichePdf";
+import logoComplet from "./assets/logo-bikibiomed.png";
+import logoEmbleme from "./assets/logo-embleme.png";
+
+// Le logo est préparé une fois pour être inséré dans les PDF
+chargerLogoPdf(logoComplet);
 
 const API    = "https://plateforme-biomedicale-production.up.railway.app/api";
 const API_IA = "https://plateforme-biomedicale-production-e0bf.up.railway.app/ia";
@@ -244,8 +250,8 @@ function PageConnexion({onLogin,onGoToInscription}) {
       <AnimatedBackground/>
       <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:460,padding:"0 24px"}}>
         <div style={{textAlign:"center",marginBottom:40}}>
-          <div style={{width:80,height:80,borderRadius:"50%",margin:"0 auto 16px",background:"rgba(0,212,170,0.1)",border:"2px solid rgba(0,212,170,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,boxShadow:"0 0 40px rgba(0,212,170,0.15)"}}>🏥</div>
-          <h1 style={{fontSize:28,fontWeight:900,color:"var(--text)",margin:0,letterSpacing:"-0.02em"}}>BIKIBioMed</h1>
+          <img src={logoComplet} alt="BIKIBioMed" style={{width:230,maxWidth:"70%",height:"auto",display:"block",margin:"0 auto",filter:"drop-shadow(0 4px 18px rgba(0,0,0,0.25))"}}/>
+          <h1 style={{position:"absolute",width:1,height:1,overflow:"hidden",clip:"rect(0 0 0 0)",margin:0}}>BIKIBioMed</h1>
           <p style={{fontSize:12,color:"var(--muted)",marginTop:6,textTransform:"uppercase",letterSpacing:"0.15em"}}>Gestion Intelligente du Parc Biomédical</p>
         </div>
         <div style={{background:"var(--panel-bg)",backdropFilter:"blur(20px)",borderRadius:20,padding:"40px 36px",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
@@ -352,6 +358,7 @@ function PageInscription({onLogin,onRetourConnexion}) {
         <AnimatedBackground/>
         <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:520,padding:"0 24px"}}>
           <div style={{textAlign:"center",marginBottom:32}}>
+            <img src={logoComplet} alt="BIKIBioMed" style={{width:150,maxWidth:"50%",height:"auto",display:"block",margin:"0 auto 14px"}}/>
             <h1 style={{fontSize:24,fontWeight:900,color:"var(--text)",margin:0}}>Créer votre compte</h1>
             <p style={{fontSize:13,color:"var(--muted)",marginTop:8}}>Choisissez comment vous souhaitez utiliser la plateforme</p>
           </div>
@@ -1810,7 +1817,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:16,fontFamily:"Segoe UI",position:"relative"}}>
       <AnimatedBackground/>
       <div style={{position:"relative",zIndex:1,textAlign:"center"}}>
-        <div style={{fontSize:56,marginBottom:16,filter:"drop-shadow(0 0 20px rgba(0,212,170,0.5))"}}>🏥</div>
+        <img src={logoComplet} alt="BIKIBioMed" style={{width:180,height:"auto",marginBottom:16}}/>
         <div style={{fontSize:20,fontWeight:800,color:"var(--text)",letterSpacing:"-0.02em"}}>Chargement...</div>
         <div style={{fontSize:13,color:"var(--muted-3)",marginTop:8}}>Connexion à la base de données</div>
       </div>
@@ -1826,7 +1833,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
       <div style={S.sidebar}>
         <div style={S.sidebarTop}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
-            <span style={{fontSize:22}}>🏥</span>
+            <img src={logoEmbleme} alt="" style={{width:40,height:"auto",flexShrink:0}}/>
             <div><div style={S.sidebarTitle}>BIKIBioMed</div><div style={S.sidebarSub}>{organisation?.nom||"Gestion Biomédicale"}</div></div>
           </div>
         </div>

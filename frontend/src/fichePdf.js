@@ -5,6 +5,29 @@
 // ════════════════════════════════════════════════════════════
 import jsPDF from "jspdf";
 
+// ── Logo inséré dans les PDF (chargé une fois au démarrage) ──
+let LOGO = null; // { data, ratio } : ratio = hauteur / largeur
+export function chargerLogoPdf(url) {
+  try {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext("2d").drawImage(img, 0, 0);
+        LOGO = { data: c.toDataURL("image/png"), ratio: img.naturalHeight / img.naturalWidth };
+      } catch { LOGO = null; }
+    };
+    img.src = url;
+  } catch { LOGO = null; }
+}
+export function logoPdf() { return LOGO; }
+// Dessine le logo dans une largeur donnée ; renvoie la hauteur utilisée (0 si pas de logo)
+export function dessinerLogo(doc, x, y, largeur) {
+  if (!LOGO) return 0;
+  try { const h = largeur * LOGO.ratio; doc.addImage(LOGO.data, "PNG", x, y, largeur, h); return h; } catch { return 0; }
+}
+
 // "2026-10-09 14:30:00" ou "2026-10-09T14:30" → "09/10/2026 à 14:30"
 export function formaterDateHeure(v) {
   if (!v) return "";
@@ -49,7 +72,8 @@ export function creerPdfFiche(f) {
 
   doc.setDrawColor(60, 60, 60); doc.setLineWidth(0.3);
 
-  // ── Titre ──
+  // ── Titre (logo en haut à gauche) ──
+  dessinerLogo(doc, X, 6, 22);
   police(13, true, "times"); texte("MAINTENANCE MATÉRIEL MÉDICAL", 105, y, { align: "center" });
   police(9); doc.setTextColor(90); texte(f.etablissement || "", 105, y + 5.5, { align: "center" }); doc.setTextColor(0);
   y += 12;

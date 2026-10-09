@@ -5,7 +5,7 @@
 // ════════════════════════════════════════════════════════════
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { formaterDateHeure, nomFichier } from "./fichePdf";
+import { formaterDateHeure, nomFichier, dessinerLogo } from "./fichePdf";
 
 export const SECTIONS_RAPPORT = [
   { id: "indicateurs", label: "Indicateurs clés" },
@@ -109,7 +109,8 @@ export function creerRapport({ organisation, user, equipements, maintenances, fi
   // En-tête clair (économe en encre à l'impression) avec un liseré vert
   doc.setFillColor(236, 249, 245); doc.rect(0, 0, 210, 80, "F");
   doc.setFillColor(...VERT); doc.rect(0, 0, 4, 80, "F"); doc.rect(0, 80, 210, 1.2, "F");
-  doc.setTextColor(...VERT); police(10, true); T("BIKIBioMed", 14, 20);
+  // Logo à droite ; si l'image n'est pas disponible, le nom est écrit à la place
+  if (!dessinerLogo(doc, 152, 10, 46)) { doc.setTextColor(...VERT); police(10, true); T("BIKIBioMed", 14, 20); }
   doc.setTextColor(...SOMBRE); police(24, true); T("Rapport d'activité", 14, 40); T("du parc biomédical", 14, 51);
   police(12); doc.setTextColor(60, 70, 80); T(etab, 14, 66);
   doc.setTextColor(0);
