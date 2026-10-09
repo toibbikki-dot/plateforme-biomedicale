@@ -1525,19 +1525,18 @@ const Archives = memo(({fiches,estAdmin,supprimerFiche})=>{
       <div style={S.card}>
         <div style={{overflowX:"auto"}}>
         <table style={S.tbl}>
-          <thead><tr>{["N° fiche","Date","Équipement","Service / type","Intervenant","État final","PDF"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <thead><tr>{["Fiche","Équipement","Service / type","Intervenant","État final","Actions"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
           <tbody>
             {liste.map(f=>(
               <tr key={f.id}>
-                <td style={S.td}><code style={{background:"rgba(167,139,250,0.1)",color:"#A78BFA",padding:"2px 8px",borderRadius:4,fontSize:11,whiteSpace:"nowrap"}}>{f.numero}</code></td>
-                <td style={{...S.td,whiteSpace:"nowrap"}}>{formaterDateHeure(f.date_fin||f.createdAt)}</td>
+                <td style={S.td}><code style={{background:"rgba(167,139,250,0.1)",color:"#A78BFA",padding:"2px 8px",borderRadius:4,fontSize:11,whiteSpace:"nowrap"}}>{f.numero}</code><div style={{fontSize:11,color:"var(--muted)",marginTop:5,whiteSpace:"nowrap"}}>{formaterDateHeure(f.date_fin||f.createdAt)}</div></td>
                 <td style={S.td}><div style={{fontWeight:600,color:"var(--text)"}}>{f.equipement_nom}</div><div style={{fontSize:11,color:"var(--muted-3)"}}>{f.numero_serie}</div></td>
                 <td style={S.td}><div>{f.lieu||"—"}</div><div style={{fontSize:11,color:"var(--muted-3)"}}>{f.type_maintenance}</div></td>
                 <td style={S.td}>{f.technicien_nom}</td>
                 <td style={S.td}><span style={{color:f.etat_final==="Fonctionnel"?"#00D4AA":"#FF4D6D",fontWeight:700,fontSize:12,whiteSpace:"nowrap"}}>{f.etat_final==="Fonctionnel"?"✅ Fonctionnel":"❌ Non fonctionnel"}</span></td>
-                <td style={S.td}><button style={{...S.btn("#A78BFA"),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}} onClick={()=>telechargerPdfFiche(f)} title={`Télécharger la fiche ${f.numero}`}>📄 PDF</button>
-                  {estAdmin&&<button onClick={()=>supprimerFiche(f)} title="Supprimer cette fiche de l'archive" style={{marginLeft:6,background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>🗑️</button>}
-                </td>
+                <td style={S.td}><div style={{display:"flex",gap:6,alignItems:"center",justifyContent:"center",flexWrap:"nowrap"}}><button style={{...S.btn("#A78BFA"),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}} onClick={()=>telechargerPdfFiche(f)} title={`Télécharger la fiche ${f.numero}`}>📄 PDF</button>
+                  {estAdmin&&<button onClick={()=>supprimerFiche(f)} title="Supprimer cette fiche de l'archive" style={{background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11}}>🗑️</button>}
+                </div></td>
               </tr>
             ))}
           </tbody>
