@@ -168,6 +168,17 @@ const AnimatedBackground = memo(() => {
     delay:Math.random()*10,
     opacity:Math.random()*0.08+0.03,
   }));
+  // Une dizaine de petits logos BIKIBioMed répartis sur l'écran (une case par logo
+  // dans une grille 5 × 2, position aléatoire dans la case pour éviter les amas)
+  const logosFond = Array.from({length:10},(_,i)=>({
+    id:i,
+    x:(i%5)*20+Math.random()*12+2,
+    y:Math.floor(i/5)*50+Math.random()*30+8,
+    size:Math.round(Math.random()*26+34),
+    duration:Math.random()*20+18,
+    delay:Math.random()*10,
+    opacity:Math.random()*0.05+0.07,
+  }));
   return (
     <div style={{position:"fixed",inset:0,overflow:"hidden",zIndex:0,pointerEvents:"none"}}>
       <div style={{position:"absolute",inset:0,background:"var(--bg-grad)"}}/>
@@ -180,6 +191,9 @@ const AnimatedBackground = memo(() => {
       `}</style>
       {particles.map(p=>(
         <div key={p.id} style={{position:"absolute",left:`${p.x}%`,top:`${p.y}%`,fontSize:`${p.size}px`,opacity:p.opacity,animation:`float ${p.duration}s ${p.delay}s ease-in-out infinite`}}>{p.icon}</div>
+      ))}
+      {logosFond.map(p=>(
+        <img key={"logo"+p.id} src={logoEmbleme} alt="" draggable={false} style={{position:"absolute",left:`${p.x}%`,top:`${p.y}%`,width:p.size,height:"auto",opacity:p.opacity,animation:`float ${p.duration}s ${p.delay}s ease-in-out infinite`,userSelect:"none"}}/>
       ))}
       <div style={{position:"absolute",left:0,right:0,height:"1px",background:"linear-gradient(90deg,transparent,rgba(0,212,170,0.15),transparent)",animation:"scan-line 8s linear infinite"}}/>
     </div>
