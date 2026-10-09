@@ -1363,7 +1363,10 @@ const Calendrier = memo(({maintenances})=>{
   const nomsJ=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
   // Date locale au format AAAA-MM-JJ (sans décalage de fuseau horaire)
   const jourISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  const retard=maintenances.filter(m=>new Date(m.datePlanifiee)<new Date()&&m.statut==="Planifiée");
+  // En retard = date prévue strictement avant aujourd'hui (comparaison par jour, sans l'heure)
+  const aujourdhui=jourISO(new Date());
+  const retard=maintenances.filter(m=>m.statut==="Planifiée"&&m.datePlanifiee&&m.datePlanifiee<aujourdhui);
+
   return(
     <div>
       {retard.length>0&&(<div style={{background:"rgba(255,77,109,0.08)",border:"1px solid rgba(255,77,109,0.2)",borderRadius:10,padding:16,marginBottom:20}}><div style={{fontWeight:700,color:"#FF4D6D",marginBottom:8}}>⚠️ {retard.length} maintenance(s) en retard !</div>{retard.map(m=><div key={m.id} style={{fontSize:13,color:"rgba(255,77,109,0.8)"}}>• {m.equipementNom} — prévu le {m.datePlanifiee}</div>)}</div>)}
