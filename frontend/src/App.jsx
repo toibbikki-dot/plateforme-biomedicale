@@ -1358,9 +1358,11 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerS
 
 const Calendrier = memo(({maintenances})=>{
   const [moisCal,setMoisCal]=useState(new Date());
-  function joursDuMois(d){const y=d.getFullYear(),m=d.getMonth();const p=new Date(y,m,1),l=new Date(y,m+1,0);const j=[];for(let i=0;i<p.getDay();i++) j.push(null);for(let dd=1;dd<=l.getDate();dd++) j.push(new Date(y,m,dd));return j;}
+  function joursDuMois(d){const y=d.getFullYear(),m=d.getMonth();const p=new Date(y,m,1),l=new Date(y,m+1,0);const j=[];for(let i=0;i<(p.getDay()+6)%7;i++) j.push(null);for(let dd=1;dd<=l.getDate();dd++) j.push(new Date(y,m,dd));return j;}
   const jours=joursDuMois(moisCal);
-  const nomsJ=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
+  const nomsJ=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  // Date locale au format AAAA-MM-JJ (sans décalage de fuseau horaire)
+  const jourISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   const retard=maintenances.filter(m=>new Date(m.datePlanifiee)<new Date()&&m.statut==="Planifiée");
   return(
     <div>
@@ -1371,12 +1373,12 @@ const Calendrier = memo(({maintenances})=>{
           <div style={{fontSize:18,fontWeight:700,color:"var(--text)",textTransform:"capitalize"}}>{moisCal.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div>
           <button style={S.btnO} onClick={()=>setMoisCal(new Date(moisCal.getFullYear(),moisCal.getMonth()+1))}>Suivant →</button>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:4}}>
           {nomsJ.map(j=><div key={j} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--muted-3)",padding:"8px 0",textTransform:"uppercase",letterSpacing:"0.05em"}}>{j}</div>)}
           {jours.map((date,i)=>{
-            const maints=date?maintenances.filter(m=>m.datePlanifiee===date.toISOString().split("T")[0]):[];
+            const maints=date?maintenances.filter(m=>m.datePlanifiee===jourISO(date)):[];
             const auj=date&&date.toDateString()===new Date().toDateString();
-            return(<div key={i} style={{minHeight:68,padding:6,borderRadius:8,background:auj?"rgba(0,212,170,0.08)":date?"var(--w02)":"transparent",border:auj?"1px solid rgba(0,212,170,0.3)":date?"1px solid var(--w04)":"none"}}>{date&&<><div style={{fontSize:13,fontWeight:auj?700:400,color:auj?"#00D4AA":"var(--muted-2)"}}>{date.getDate()}</div>{maints.map(m=><div key={m.id} style={{fontSize:9,padding:"2px 4px",borderRadius:3,marginTop:2,background:m.type==="Préventive"?"rgba(59,130,246,0.2)":"rgba(255,77,109,0.15)",color:m.type==="Préventive"?"#60A5FA":"#FF4D6D",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔧 {m.equipementNom}</div>)}</>}</div>);
+            return(<div key={i} style={{minHeight:68,padding:6,minWidth:0,overflow:"hidden",borderRadius:8,background:auj?"rgba(0,212,170,0.08)":date?"var(--w02)":"transparent",border:auj?"1px solid rgba(0,212,170,0.3)":date?"1px solid var(--w04)":"none"}}>{date&&<><div style={{fontSize:13,fontWeight:auj?700:400,color:auj?"#00D4AA":"var(--muted-2)"}}>{date.getDate()}</div>{maints.map(m=><div key={m.id} title={`${m.equipementNom} — ${m.type} (${m.statut})`} style={{fontSize:9,padding:"2px 4px",borderRadius:3,marginTop:2,background:m.type==="Préventive"?"rgba(59,130,246,0.2)":"rgba(255,77,109,0.15)",color:m.type==="Préventive"?"#60A5FA":"#FF4D6D",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔧 {m.equipementNom}</div>)}</>}</div>);
           })}
         </div>
       </div>
