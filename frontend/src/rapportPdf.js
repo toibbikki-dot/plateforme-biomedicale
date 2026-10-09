@@ -106,10 +106,12 @@ export function creerRapport({ organisation, user, equipements, maintenances, fi
   const apres = () => { y = doc.lastAutoTable.finalY + 10; };
 
   // ── Page de garde ──
-  doc.setFillColor(...SOMBRE); doc.rect(0, 0, 210, 80, "F");
-  doc.setTextColor(0, 212, 170); police(10, true); T("BIOMED PLATEFORME", 14, 20);
-  doc.setTextColor(255); police(24, true); T("Rapport d'activité", 14, 40); T("du parc biomédical", 14, 51);
-  police(12); T(etab, 14, 66);
+  // En-tête clair (économe en encre à l'impression) avec un liseré vert
+  doc.setFillColor(236, 249, 245); doc.rect(0, 0, 210, 80, "F");
+  doc.setFillColor(...VERT); doc.rect(0, 0, 4, 80, "F"); doc.rect(0, 80, 210, 1.2, "F");
+  doc.setTextColor(...VERT); police(10, true); T("BIKIBioMed", 14, 20);
+  doc.setTextColor(...SOMBRE); police(24, true); T("Rapport d'activité", 14, 40); T("du parc biomédical", 14, 51);
+  police(12); doc.setTextColor(60, 70, 80); T(etab, 14, 66);
   doc.setTextColor(0);
   y = 98;
   const infos = [["Période", libPeriode], ["Établi par", `${auteur} (${user?.role || ""})`], ["Date d'export", `${dateFr(D.now)} à ${heure}`], ["Équipements suivis", String(D.total)]];

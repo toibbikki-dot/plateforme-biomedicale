@@ -276,7 +276,7 @@ def predire(ctx, equip):
 def ping():
     # Route publique : ne renvoie aucune donnée d'organisation
     return jsonify({
-        "message": "✅ Serveur IA BioMed opérationnel !",
+        "message": "✅ Serveur IA BIKIBioMed opérationnel !",
         "version": "3.0.0",
         "modeles_entraines": len(modeles),
         "backend_url": BACKEND_URL
@@ -347,7 +347,7 @@ def stats_globales(jeton):
 # ════════════════════════════════════════════════════════════
 if __name__ == '__main__':
     print("="*50)
-    print("   Serveur IA BioMed v3.0 — Démarrage")
+    print("   Serveur IA BIKIBioMed v3.0 — Démarrage")
     print("="*50)
     print(f"🌐 Backend URL : {BACKEND_URL}")
     port = int(os.environ.get('PORT', 5001))

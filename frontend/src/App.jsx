@@ -245,7 +245,7 @@ function PageConnexion({onLogin,onGoToInscription}) {
       <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:460,padding:"0 24px"}}>
         <div style={{textAlign:"center",marginBottom:40}}>
           <div style={{width:80,height:80,borderRadius:"50%",margin:"0 auto 16px",background:"rgba(0,212,170,0.1)",border:"2px solid rgba(0,212,170,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,boxShadow:"0 0 40px rgba(0,212,170,0.15)"}}>🏥</div>
-          <h1 style={{fontSize:28,fontWeight:900,color:"var(--text)",margin:0,letterSpacing:"-0.02em"}}>BioMed Plateforme</h1>
+          <h1 style={{fontSize:28,fontWeight:900,color:"var(--text)",margin:0,letterSpacing:"-0.02em"}}>BIKIBioMed</h1>
           <p style={{fontSize:12,color:"var(--muted)",marginTop:6,textTransform:"uppercase",letterSpacing:"0.15em"}}>Gestion Intelligente du Parc Biomédical</p>
         </div>
         <div style={{background:"var(--panel-bg)",backdropFilter:"blur(20px)",borderRadius:20,padding:"40px 36px",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
@@ -1827,7 +1827,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
         <div style={S.sidebarTop}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
             <span style={{fontSize:22}}>🏥</span>
-            <div><div style={S.sidebarTitle}>BioMed Plateforme</div><div style={S.sidebarSub}>{organisation?.nom||"Gestion Biomédicale"}</div></div>
+            <div><div style={S.sidebarTitle}>BIKIBioMed</div><div style={S.sidebarSub}>{organisation?.nom||"Gestion Biomédicale"}</div></div>
           </div>
         </div>
         <div style={{padding:"14px 20px",borderBottom:"1px solid rgba(0,212,170,0.08)",background:"rgba(0,212,170,0.02)"}}>

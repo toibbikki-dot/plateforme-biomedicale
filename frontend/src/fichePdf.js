@@ -114,7 +114,7 @@ export function creerPdfFiche(f) {
   police(9.5); texte(`Tél : ${f.telephone || ""}`, X, y);
   doc.setDrawColor(40, 60, 140); doc.line(X, y + 1.5, D, y + 1.5);
   police(7.5); doc.setTextColor(120);
-  texte(`Fiche ${f.numero} enregistrée sur BioMed Plateforme le ${formaterDateHeure(f.createdAt)}${f.cree_par_nom ? ` par ${f.cree_par_nom}` : ""}.`, X, y + 6);
+  texte(`Fiche ${f.numero} enregistrée sur BIKIBioMed le ${formaterDateHeure(f.createdAt)}${f.cree_par_nom ? ` par ${f.cree_par_nom}` : ""}.`, X, y + 6);
   doc.setTextColor(0);
   return doc;
 }
