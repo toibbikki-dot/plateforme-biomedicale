@@ -174,7 +174,7 @@ const AnimatedBackground = memo(() => {
     id:i,
     x:(i%5)*20+Math.random()*12+2,
     y:Math.floor(i/5)*50+Math.random()*30+8,
-    size:Math.round(Math.random()*26+34),
+    size:Math.round(Math.random()*40+75),
     duration:Math.random()*20+18,
     delay:Math.random()*10,
     opacity:Math.random()*0.05+0.07,
