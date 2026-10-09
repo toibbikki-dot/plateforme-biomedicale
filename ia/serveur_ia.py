@@ -93,6 +93,24 @@ def get_iot_data(ctx, equipement_id):
 # ════════════════════════════════════════════════════════════
 # EXTRACTION DES FEATURES
 # ════════════════════════════════════════════════════════════
+def texte_anciennete(date_txt, age_jours):
+    """Âge lisible (« 11 ans 2 mois »), même calcul que la page Équipements."""
+    try:
+        d = datetime.strptime(date_txt or '', '%Y-%m-%d')
+        n = datetime.now()
+        mois = (n.year - d.year) * 12 + (n.month - d.month) - (1 if n.day < d.day else 0)
+    except (ValueError, TypeError):
+        mois = age_jours // 30
+    mois = max(0, mois)
+    if mois < 1:
+        return "moins d'un mois"
+    ans, reste = divmod(mois, 12)
+    parties = []
+    if ans: parties.append(f"{ans} an{'s' if ans > 1 else ''}")
+    if reste: parties.append(f"{reste} mois")
+    return " ".join(parties)
+
+
 def extraire_features(ctx, equip):
     equipement_id = equip['id']
 
@@ -222,7 +240,7 @@ def predire(ctx, equip):
     else: niveau, delai, couleur = "BASSE", 30, "#00D4AA"
 
     facteurs = []
-    if features['age_jours'] > 1000: facteurs.append(f"Équipement âgé de {features['age_jours']} jours")
+    if features['age_jours'] > 1000: facteurs.append(f"Équipement âgé de {texte_anciennete(equip.get('dateAcquisition'), features['age_jours'])}")
     if features['ratio_correctif'] > 0.5: facteurs.append(f"Ratio correctif élevé ({features['ratio_correctif']*100:.0f}%)")
     if features['nb_correctives'] > 2: facteurs.append(f"{features['nb_correctives']} maintenances correctives")
     if features['nb_alertes'] > 3: facteurs.append(f"{features['nb_alertes']} alertes enregistrées")
