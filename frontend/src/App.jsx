@@ -764,7 +764,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
 // AUTRES COMPOSANTS (identiques à v8)
 // ════════════════════════════════════════════════════════════
 
-const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMaint,total,serv,maint,panne,dispo,crit,exportPDF,setOnglet})=>(
+const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMaint,total,serv,maint,panne,dispo,crit,exportPDF,setOnglet,estProprietaire,telechargerSauvegarde})=>(
   <div>
     <div style={S.kgrid}>
       {[
@@ -783,6 +783,7 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
     </div>
     <div style={{marginBottom:24,display:"flex",gap:12,flexWrap:"wrap"}}>
       <button style={S.btn("#00D4AA")} onClick={exportPDF}>📄 Exporter PDF</button>
+      {estProprietaire&&<button style={S.btn("#64748B")} onClick={telechargerSauvegarde} title="Télécharger une copie complète des données de l'organisation (propriétaire uniquement)">💾 Sauvegarde des données</button>}
       <button style={S.btn("#7C3AED")} onClick={()=>setOnglet("iot")}>📡 Surveillance IoT</button>
       <button style={S.btn("#F59E0B")} onClick={()=>setOnglet("ia")}>🤖 Analyse IA</button>
     </div>
@@ -1679,6 +1680,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
   const [iotData,setIotData]=useState([]);
   const [utilisateurs,setUtilisateurs]=useState([]);
   const [fiches,setFiches]=useState([]);
+  const [estProprietaire,setEstProprietaire]=useState(false);
   const [ficheEnCours,setFicheEnCours]=useState(null); // maintenance en train d'être terminée
   const [chargement,setChargement]=useState(true);
   const [message,setMessage]=useState(null);
@@ -1731,7 +1733,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
   useEffect(()=>{clearInterval(iotTimerRef.current);if(monitoringActif){chargerIot(iotEquipId);iotTimerRef.current=setInterval(()=>chargerIot(iotEquipId),5000);}return()=>clearInterval(iotTimerRef.current);},[monitoringActif,iotEquipId]);
 
   async function charger(){
-    try{setChargement(true);const h=hdrs();const [r1,r2,r3]=await Promise.all([fetch(`${API}/equipements`,{headers:h}),fetch(`${API}/maintenances`,{headers:h}),fetch(`${API}/alertes`,{headers:h})]);if(r1.status===401){onLogout();return;}try{const rm=await fetch(`${API}/moi`,{headers:h});if(rm.ok){const moi=await rm.json();if(moi.role&&moi.role!==user.role){onMajUtilisateur({...user,role:moi.role});toast(`ℹ️ Votre rôle a été modifié : ${moi.role}`);}}}catch{}setEquipements(await r1.json());setMaintenances(await r2.json());setAlertes(await r3.json());if(user.role==="ADMIN"){const r4=await fetch(`${API}/utilisateurs`,{headers:h});setUtilisateurs(await r4.json());}}catch{toast("❌ Serveur inaccessible","e");}finally{setChargement(false);}
+    try{setChargement(true);const h=hdrs();const [r1,r2,r3]=await Promise.all([fetch(`${API}/equipements`,{headers:h}),fetch(`${API}/maintenances`,{headers:h}),fetch(`${API}/alertes`,{headers:h})]);if(r1.status===401){onLogout();return;}try{const rm=await fetch(`${API}/moi`,{headers:h});if(rm.ok){const moi=await rm.json();setEstProprietaire(!!moi.est_proprietaire);if(moi.role&&moi.role!==user.role){onMajUtilisateur({...user,role:moi.role});toast(`ℹ️ Votre rôle a été modifié : ${moi.role}`);}}}catch{}setEquipements(await r1.json());setMaintenances(await r2.json());setAlertes(await r3.json());if(user.role==="ADMIN"){const r4=await fetch(`${API}/utilisateurs`,{headers:h});setUtilisateurs(await r4.json());}}catch{toast("❌ Serveur inaccessible","e");}finally{setChargement(false);}
   }
   async function chargerIot(id){try{const r=await fetch(`${API}/capteurs/${id}`,{headers:hdrs()});if(r.ok){const d=await r.json();if(Array.isArray(d))setIotData(d.reverse());}}catch{}}
   function toast(t,type="s"){setMessage({t,type});setTimeout(()=>setMessage(null),3500);}
@@ -1754,6 +1756,18 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
       rafraichirEnDirect();
       return null;
     }catch{return "Erreur réseau : la fiche n'a pas été enregistrée.";}
+  }
+  // Sauvegarde complète des données (propriétaire uniquement)
+  async function telechargerSauvegarde(){
+    try{
+      const r=await fetch(`${API}/organisation/sauvegarde`,{headers:hdrs()});
+      if(!r.ok){const e=await r.json().catch(()=>({}));toast("❌ "+(e.erreur||"Sauvegarde impossible"),"e");return;}
+      const blob=await r.blob();
+      const d=new Date(),z=n=>String(n).padStart(2,"0");
+      const nom=`sauvegarde_${nomFichier(organisation?.nom||"organisation")}_${z(d.getDate())}-${z(d.getMonth()+1)}-${d.getFullYear()}.json`;
+      const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=nom;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+      toast("💾 Sauvegarde téléchargée — conservez ce fichier en lieu sûr");
+    }catch{toast("❌ Erreur réseau : sauvegarde impossible","e");}
   }
   async function supprimerFiche(f){
     if(!window.confirm(`Supprimer la fiche ${f.numero} (${f.equipement_nom}) de l'archive ?\n\nElle ne sera plus visible ni téléchargeable. Son numéro ne sera pas réattribué.`)) return;
@@ -1872,7 +1886,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
       <div style={S.main}>
         <div style={S.title}>{titres[onglet]?.title}</div>
         <div style={S.sub}>{titres[onglet]?.sub}</div>
-        {onglet==="dashboard"&&<Dashboard equipements={equipements} maintenances={maintenances} pieStatuts={pieStatuts} barServices={barServices} pieMaint={pieMaint} total={total} serv={serv} maint={maint} panne={panne} dispo={dispo} crit={crit} exportPDF={exportPDF} setOnglet={setOnglet}/>}
+        {onglet==="dashboard"&&<Dashboard equipements={equipements} maintenances={maintenances} pieStatuts={pieStatuts} barServices={barServices} pieMaint={pieMaint} total={total} serv={serv} maint={maint} panne={panne} dispo={dispo} crit={crit} exportPDF={exportPDF} setOnglet={setOnglet} estProprietaire={estProprietaire} telechargerSauvegarde={telechargerSauvegarde}/>}
         {onglet==="equipements"&&<Equipements equipements={equipements} peutModifier={peutModifier} supprimerEquipement={supprimerEquipement} changerEquipMonitoring={changerEquipMonitoring} setOnglet={setOnglet} token={token} charger={charger}/>}
         {onglet==="maintenances"&&<Maintenances maintenances={maintenances} equipements={equipements} ajouterMaintenance={ajouterMaintenance} changerStatutMaintenance={changerStatutMaintenance} fiches={fiches}/>}
         {onglet==="archives"&&<Archives fiches={fiches} estAdmin={estAdmin} supprimerFiche={supprimerFiche}/>}

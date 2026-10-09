@@ -974,6 +974,41 @@ app.post("/api/organisation/proprietaire", requireAdmin, (req, res) => {
 });
 
 // Profil courant (rôle à jour, utile si un admin l'a modifié)
+// ── Sauvegarde complète des données de l'organisation (propriétaire uniquement) ──
+// Fichier JSON : toutes les tables, limitées à l'organisation de l'utilisateur.
+// Les clés des appareils ESP32 sont exclues ; les mots de passe restent chiffrés (bcrypt).
+app.get("/api/organisation/sauvegarde", (req, res) => {
+  if (!estProprietaire(req)) return res.status(403).json({ erreur: "Seul le propriétaire de l'organisation peut télécharger une sauvegarde" });
+  try {
+    const org = req.user.organisation_id;
+    const tout = (sql) => db.prepare(sql).all(org);
+    const organisation = db.prepare("SELECT id, nom, type, proprietaire_id, createdAt FROM organisations WHERE id=?").get(org);
+    const utilisateurs = tout("SELECT * FROM utilisateurs WHERE organisation_id=?");
+    const donnees = {
+      organisation,
+      utilisateurs,
+      preferences: utilisateurs.length ? db.prepare(`SELECT * FROM preferences WHERE user_id IN (${utilisateurs.map(() => "?").join(",")})`).all(...utilisateurs.map(u => u.id)) : [],
+      equipements: tout("SELECT * FROM equipements WHERE organisation_id=?").map(sansCle),
+      maintenances: tout("SELECT * FROM maintenances WHERE organisation_id=?"),
+      fiches_intervention: tout("SELECT * FROM fiches_intervention WHERE organisation_id=?"),
+      alertes: tout("SELECT * FROM alertes WHERE organisation_id=?"),
+      equipement_capteurs: tout("SELECT * FROM equipement_capteurs WHERE organisation_id=?"),
+      iot_data: tout("SELECT * FROM iot_data WHERE organisation_id=?"),
+    };
+    const resume = Object.fromEntries(Object.entries(donnees).filter(([, v]) => Array.isArray(v)).map(([k, v]) => [k, v.length]));
+    const date = new Date().toISOString().slice(0, 10);
+    const nomOrg = String(organisation?.nom || "organisation").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    res.setHeader("Content-Disposition", `attachment; filename="sauvegarde_${nomOrg}_${date}.json"`);
+    res.json({
+      format: "BIKIBioMed-sauvegarde", version: 1,
+      creee_le: new Date().toISOString(),
+      creee_par: { id: req.user.id, nom: `${req.user.prenom || ""} ${req.user.nom || ""}`.trim() },
+      remarque: "Fichier confidentiel : il contient les données de l'organisation et les mots de passe chiffrés des utilisateurs. Les clés des appareils ESP32 ne sont pas incluses.",
+      resume, donnees,
+    });
+  } catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
 app.get("/api/moi", (req, res) => {
   res.json({ id: req.user.id, nom: req.user.nom, prenom: req.user.prenom, email: req.user.email, role: req.user.role, est_proprietaire: estProprietaire(req), max_admins: MAX_ADMINS });
 });
