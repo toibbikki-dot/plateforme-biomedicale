@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, RadialBarChart, RadialBar } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { telechargerPdfFiche, formaterDateHeure, nomFichier } from "./fichePdf";
 
 const API    = "https://plateforme-biomedicale-production.up.railway.app/api";
 const API_IA = "https://plateforme-biomedicale-production-e0bf.up.railway.app/ia";
@@ -89,6 +90,18 @@ const TRIS_MAINTENANCE={
   type:{label:"Type : A → Z",cmp:(a,b)=>cmpTexte(a.type,b.type)},
   technicien_az:{label:"Technicien : A → Z",cmp:(a,b)=>cmpVide(texte(a.technicien),texte(b.technicien),cmpTexte)},
   ajout_recent:{label:"Ajoutée récemment d'abord",cmp:(a,b)=>b.id-a.id},
+};
+const TRIS_FICHE={
+  date_desc:{label:"Date : la plus récente d'abord",cmp:(a,b)=>cmpVide(a.date_fin||a.createdAt,b.date_fin||b.createdAt,(x,y)=>asc(y,x))},
+  date_asc:{label:"Date : la plus ancienne d'abord",cmp:(a,b)=>cmpVide(a.date_fin||a.createdAt,b.date_fin||b.createdAt,asc)},
+  numero_desc:{label:"N° de fiche : décroissant",cmp:(a,b)=>(b.annee-a.annee)||(b.sequence-a.sequence)},
+  numero_asc:{label:"N° de fiche : croissant",cmp:(a,b)=>(a.annee-b.annee)||(a.sequence-b.sequence)},
+  equip_az:{label:"Équipement : A → Z",cmp:(a,b)=>cmpTexte(a.equipement_nom,b.equipement_nom)},
+  equip_za:{label:"Équipement : Z → A",cmp:(a,b)=>cmpTexte(b.equipement_nom,a.equipement_nom)},
+  service_az:{label:"Service : A → Z",cmp:(a,b)=>cmpTexte(a.lieu,b.lieu)},
+  intervenant_az:{label:"Intervenant : A → Z",cmp:(a,b)=>cmpTexte(a.technicien_nom,b.technicien_nom)},
+  type:{label:"Type de maintenance : A → Z",cmp:(a,b)=>cmpTexte(a.type_maintenance,b.type_maintenance)},
+  etat:{label:"État : non fonctionnel d'abord",cmp:(a,b)=>(a.etat_final==="Non fonctionnel"?0:1)-(b.etat_final==="Non fonctionnel"?0:1)},
 };
 // Trie une copie de la liste (la liste d'origine n'est pas modifiée).
 // En cas d'égalité, l'ordre d'ajout le plus récent départage.
@@ -1286,7 +1299,8 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
   );
 });
 
-const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerStatutMaintenance})=>{
+const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerStatutMaintenance,fiches})=>{
+  const ficheParMaint=new Map((fiches||[]).map(f=>[f.maintenance_id,f]));
   const [showForm,setShowForm]=useState(false);
   const [form,setForm]=useState({equipementId:"",type:"Préventive",statut:"Planifiée",datePlanifiee:"",technicien:"",description:""});
   function sauvegarder(){ajouterMaintenance(form,()=>{setShowForm(false);setForm({equipementId:"",type:"Préventive",statut:"Planifiée",datePlanifiee:"",technicien:"",description:""});});}
@@ -1320,7 +1334,10 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerS
                   {m.statut==="En cours"&&(
                     <button style={{...S.btn("#00D4AA"),fontSize:11,padding:"4px 10px"}} onClick={()=>changerStatutMaintenance(m,"Terminée")}>✅ Terminer</button>
                   )}
-                  {m.statut==="Terminée"&&<span style={{fontSize:11,color:"var(--muted)"}}>{m.dateTerminee?`Terminée le ${formaterDate(m.dateTerminee)}`:"—"}</span>}
+                  {m.statut==="Terminée"&&<div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"flex-start"}}>
+                    <span style={{fontSize:11,color:"var(--muted)"}}>{m.dateTerminee?`Terminée le ${formaterDate(m.dateTerminee)}`:"—"}</span>
+                    {ficheParMaint.get(m.id)&&<button style={{...S.btn("#A78BFA"),fontSize:11,padding:"4px 10px"}} title={`Télécharger la fiche ${ficheParMaint.get(m.id).numero}`} onClick={()=>telechargerPdfFiche(ficheParMaint.get(m.id))}>📄 Fiche {ficheParMaint.get(m.id).numero}</button>}
+                  </div>}
                 </td>
               </tr>
             ))}
@@ -1342,7 +1359,7 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerS
               <div><label style={S.lbl}>Type</label><select style={S.sel} value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}><option>Préventive</option><option>Corrective</option><option>Calibration</option></select></div>
               <div><label style={S.lbl}>Date *</label><input style={S.inp} type="date" value={form.datePlanifiee} onChange={e=>setForm(p=>({...p,datePlanifiee:e.target.value}))}/></div>
               <div><label style={S.lbl}>Technicien</label><input style={S.inp} placeholder="Nom du technicien" value={form.technicien} onChange={e=>setForm(p=>({...p,technicien:e.target.value}))}/></div>
-              <div><label style={S.lbl}>Statut</label><select style={S.sel} value={form.statut} onChange={e=>setForm(p=>({...p,statut:e.target.value}))}><option>Planifiée</option><option>En cours</option><option>Terminée</option></select></div>
+              <div><label style={S.lbl}>Statut</label><select style={S.sel} value={form.statut} onChange={e=>setForm(p=>({...p,statut:e.target.value}))}><option>Planifiée</option><option>En cours</option></select></div>
               <div style={{gridColumn:"1 / -1"}}><label style={S.lbl}>Description</label><input style={S.inp} placeholder="Description" value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))}/></div>
             </div>
             <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
@@ -1352,6 +1369,120 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerS
           </div>
         </div>
       )}
+    </div>
+  );
+});
+
+// ── Fiche d'intervention : fenêtre affichée en cliquant sur « Terminer » ──
+const versChampDateHeure=v=>{const m=String(v||"").match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);return m?`${m[1]}T${m[2]}`:"";};
+function maintenantChamp(){const d=new Date();const z=n=>String(n).padStart(2,"0");return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;}
+function ModalFiche({maint,equipement,organisation,user,telephoneParDefaut,onAnnuler,onValider}){
+  const aujourdhui=maintenantChamp().slice(0,10);
+  const [form,setForm]=useState({
+    date_debut:versChampDateHeure(maint.dateDebut),date_fin:maintenantChamp(),
+    travaux:"",pieces:"",etat_final:"Fonctionnel",
+    technicien_nom:(maint.technicien||`${user.prenom||""} ${user.nom||""}`).trim(),technicien_date:aujourdhui,
+    client_nom:"",client_date:aujourdhui,telephone:telephoneParDefaut||"",
+  });
+  const [erreur,setErreur]=useState("");const [envoi,setEnvoi]=useState(false);
+  const maj=(k,v)=>setForm(p=>({...p,[k]:v}));
+  async function valider(){
+    if(!form.travaux.trim()){setErreur("Décrivez les travaux effectués.");return;}
+    if(!form.technicien_nom.trim()){setErreur("Le nom de l'intervenant est obligatoire.");return;}
+    if(form.date_debut&&form.date_fin&&form.date_debut>form.date_fin){setErreur("La date de fin doit être après la date de début.");return;}
+    setEnvoi(true);setErreur("");
+    const e=await onValider({...form,date_debut:form.date_debut.replace("T"," "),date_fin:form.date_fin.replace("T"," ")});
+    if(e){setErreur(e);setEnvoi(false);}
+  }
+  const bloc={border:"1px solid var(--w08)",borderRadius:10,padding:14,marginBottom:14};
+  const titreBloc={fontSize:11,fontWeight:800,letterSpacing:"0.08em",color:"var(--muted)",textTransform:"uppercase",marginBottom:10,textAlign:"center"};
+  const info=(l,v)=><div style={{fontSize:13,marginBottom:4}}><span style={{color:"var(--muted)"}}>{l} : </span><b style={{color:"var(--text)"}}>{v||"—"}</b></div>;
+  return(
+    <div style={S.overlay}>
+      <div style={{...S.modal,maxWidth:720,maxHeight:"92vh",overflowY:"auto"}}>
+        <h3 style={{marginBottom:4,color:"var(--text)",fontSize:18}}>📝 Fiche d'intervention</h3>
+        <div style={{fontSize:12,color:"var(--muted)",marginBottom:16}}>Remplissez la fiche pour terminer la maintenance. Le numéro de fiche est attribué automatiquement à l'enregistrement.</div>
+        <div style={bloc}>
+          {info("Établissement",organisation?.nom)}
+          {info("Lieu d'affectation du matériel",equipement?.service)}
+          <div style={{marginTop:8}}><label style={S.lbl}>Téléphone</label><input style={S.inp} placeholder="Ex : +226 25 37 00 00" value={form.telephone} onChange={e=>maj("telephone",e.target.value)}/></div>
+        </div>
+        <div style={bloc}>
+          <div style={titreBloc}>Matériel</div>
+          {info("Type",equipement?.nom||maint.equipementNom)}{info("Marque",equipement?.marque)}{info("N° série",equipement?.numeroSerie)}
+        </div>
+        <div style={bloc}>
+          <div style={titreBloc}>Intervention</div>
+          {info("Type de maintenance",maint.type)}
+          <div style={S.fgrid}>
+            <div><label style={S.lbl}>Début</label><input style={S.inp} type="datetime-local" value={form.date_debut} onChange={e=>maj("date_debut",e.target.value)}/></div>
+            <div><label style={S.lbl}>Fin</label><input style={S.inp} type="datetime-local" value={form.date_fin} onChange={e=>maj("date_fin",e.target.value)}/></div>
+          </div>
+          <label style={S.lbl}>Travaux effectués *</label>
+          <textarea style={{...S.inp,minHeight:110,resize:"vertical",fontFamily:"inherit"}} placeholder="Décrivez ce qui a été fait : diagnostic, réglages, tests, réparations…" value={form.travaux} onChange={e=>maj("travaux",e.target.value)}/>
+          <div style={{marginTop:10}}><label style={S.lbl}>Pièces remplacées</label><input style={S.inp} placeholder="Ex : 1 capteur de débit, 2 fusibles 10 A (laisser vide si aucune)" value={form.pieces} onChange={e=>maj("pieces",e.target.value)}/></div>
+          <div style={{marginTop:10}}><label style={S.lbl}>État de l'équipement après l'intervention *</label>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+              {[["Fonctionnel","✅ Fonctionnel — remis en service","#00D4AA"],["Non fonctionnel","❌ Non fonctionnel — reste en panne","#FF4D6D"]].map(([v,l,c])=>(
+                <button key={v} type="button" onClick={()=>maj("etat_final",v)} style={{...S.btn(c),opacity:form.etat_final===v?1:0.45,fontWeight:form.etat_final===v?800:500}}>{l}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={bloc}>
+          <div style={titreBloc}>Visa</div>
+          <div style={S.fgrid}>
+            <div><label style={S.lbl}>Technicien / ingénieur intervenant *</label><input style={S.inp} placeholder="Prénom et NOM" value={form.technicien_nom} onChange={e=>maj("technicien_nom",e.target.value)}/></div>
+            <div><label style={S.lbl}>Date (technicien)</label><input style={S.inp} type="date" value={form.technicien_date} onChange={e=>maj("technicien_date",e.target.value)}/></div>
+            <div><label style={S.lbl}>Client (responsable du service)</label><input style={S.inp} placeholder="Prénom et NOM" value={form.client_nom} onChange={e=>maj("client_nom",e.target.value)}/></div>
+            <div><label style={S.lbl}>Date (client)</label><input style={S.inp} type="date" value={form.client_date} onChange={e=>maj("client_date",e.target.value)}/></div>
+          </div>
+          <div style={{fontSize:11,color:"var(--muted)"}}>✍️ Les signatures se font à la main sur la fiche imprimée.</div>
+        </div>
+        {erreur&&<div style={{background:"rgba(255,77,109,0.1)",border:"1px solid rgba(255,77,109,0.3)",borderRadius:8,padding:"8px 12px",marginBottom:12,color:"#FF4D6D",fontSize:13}}>❌ {erreur}</div>}
+        <div style={{display:"flex",gap:12,justifyContent:"flex-end",flexWrap:"wrap"}}>
+          <button style={S.btnO} onClick={onAnnuler} disabled={envoi}>Annuler</button>
+          <button style={S.btnSolid()} onClick={valider} disabled={envoi}>{envoi?"⏳ Enregistrement...":"✅ Valider et générer le PDF"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Archive des interventions : toutes les fiches enregistrées ──
+const Archives = memo(({fiches})=>{
+  const [recherche,setRecherche]=useState("");
+  const [tri,setTri]=useTri("archives","date_desc",TRIS_FICHE);
+  const r=recherche.toLowerCase().trim();
+  const filtrees=(fiches||[]).filter(f=>!r||[f.numero,f.equipement_nom,f.numero_serie,f.lieu,f.technicien_nom,f.client_nom,f.travaux].some(v=>String(v||"").toLowerCase().includes(r)));
+  const liste=trierListe(filtrees,TRIS_FICHE,tri);
+  return(
+    <div>
+      <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <input style={{...S.inp,maxWidth:300}} placeholder="🔍 N° de fiche, équipement, intervenant…" value={recherche} onChange={e=>setRecherche(e.target.value)}/>
+        <SelecteurTri tris={TRIS_FICHE} valeur={tri} onChange={setTri}/>
+      </div>
+      <div style={S.card}>
+        <div style={{overflowX:"auto"}}>
+        <table style={S.tbl}>
+          <thead><tr>{["N° fiche","Date","Équipement","Service / type","Intervenant","État final","PDF"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <tbody>
+            {liste.map(f=>(
+              <tr key={f.id}>
+                <td style={S.td}><code style={{background:"rgba(167,139,250,0.1)",color:"#A78BFA",padding:"2px 8px",borderRadius:4,fontSize:11,whiteSpace:"nowrap"}}>{f.numero}</code></td>
+                <td style={{...S.td,whiteSpace:"nowrap"}}>{formaterDateHeure(f.date_fin||f.createdAt)}</td>
+                <td style={S.td}><div style={{fontWeight:600,color:"var(--text)"}}>{f.equipement_nom}</div><div style={{fontSize:11,color:"var(--muted-3)"}}>{f.numero_serie}</div></td>
+                <td style={S.td}><div>{f.lieu||"—"}</div><div style={{fontSize:11,color:"var(--muted-3)"}}>{f.type_maintenance}</div></td>
+                <td style={S.td}>{f.technicien_nom}</td>
+                <td style={S.td}><span style={{color:f.etat_final==="Fonctionnel"?"#00D4AA":"#FF4D6D",fontWeight:700,fontSize:12,whiteSpace:"nowrap"}}>{f.etat_final==="Fonctionnel"?"✅ Fonctionnel":"❌ Non fonctionnel"}</span></td>
+                <td style={S.td}><button style={{...S.btn("#A78BFA"),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}} onClick={()=>telechargerPdfFiche(f)} title={`Télécharger la fiche ${f.numero}`}>📄 PDF</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+        {liste.length===0&&<div style={{textAlign:"center",padding:40,color:"var(--muted-3)"}}>{(fiches||[]).length===0?"Aucune intervention archivée pour l'instant. Une fiche est créée à chaque maintenance terminée.":"Aucune fiche ne correspond à la recherche."}</div>}
+      </div>
     </div>
   );
 });
@@ -1486,6 +1617,8 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
   const [alertes,setAlertes]=useState([]);
   const [iotData,setIotData]=useState([]);
   const [utilisateurs,setUtilisateurs]=useState([]);
+  const [fiches,setFiches]=useState([]);
+  const [ficheEnCours,setFicheEnCours]=useState(null); // maintenance en train d'être terminée
   const [chargement,setChargement]=useState(true);
   const [message,setMessage]=useState(null);
   const [monitoringActif,setMonitoringActif]=useState(prefInitiales?.monitoring_actif===1||prefInitiales?.monitoring_actif===true);
@@ -1493,7 +1626,8 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
   const iotTimerRef=useRef(null);
   const hdrs=useCallback(()=>({"Content-Type":"application/json","Authorization":`Bearer ${token}`}),[token]);
 
-  useEffect(()=>{charger();},[]);
+  useEffect(()=>{charger();chargerFiches();},[]);
+  async function chargerFiches(){try{const r=await fetch(`${API}/fiches`,{headers:hdrs()});if(r.ok){const d=await r.json();if(Array.isArray(d))setFiches(d);}}catch{}}
 
   // Rafraîchissement automatique : alertes et statut des équipements toutes les 10 s,
   // avec une notification quand une nouvelle alerte arrive (pas besoin d'appuyer sur F5)
@@ -1544,8 +1678,24 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
   async function changerEquipMonitoring(id){setIotEquipId(id);const p={monitoring_actif:monitoringActif?1:0,monitoring_equip_id:id};localStorage.setItem("preferences",JSON.stringify(p));try{await fetch(`${API}/preferences/monitoring`,{method:"POST",headers:hdrs(),body:JSON.stringify(p)});}catch{}}
   async function supprimerEquipement(id){if(!window.confirm("⚠️ Attention : supprimer cet équipement supprimera aussi définitivement toutes ses maintenances, alertes et données IoT associées.\n\nConfirmer la suppression ?")) return;const rs=await fetch(`${API}/equipements/${id}`,{method:"DELETE",headers:hdrs()});if(!rs.ok){const e=await rs.json().catch(()=>({}));toast("❌ "+(e.erreur||"Suppression impossible"),"e");return;}setEquipements(p=>p.filter(e=>e.id!==id));toast("✅ Équipement supprimé.");}
   async function ajouterMaintenance(form,onSuccess){if(!form.equipementId||!form.datePlanifiee){toast("⚠️ Équipement et date obligatoires.","e");return;}const eq=equipements.find(e=>e.id===parseInt(form.equipementId));try{const r=await fetch(`${API}/maintenances`,{method:"POST",headers:hdrs(),body:JSON.stringify({...form,equipementId:parseInt(form.equipementId),equipementNom:eq?.nom})});const m=await r.json();if(!r.ok){toast("❌ "+(m.erreur||"Erreur"),"e");return;}setMaintenances(p=>[m,...p]);onSuccess();toast("✅ Maintenance planifiée !");rafraichirEnDirect();}catch{toast("❌ Erreur","e");}}
+  // Terminer = ouvrir la fiche d'intervention ; le PDF est généré à la validation
+  async function terminerAvecFiche(donnees){
+    const m=ficheEnCours;if(!m) return "Aucune maintenance sélectionnée";
+    try{
+      const r=await fetch(`${API}/maintenances/${m.id}/terminer`,{method:"POST",headers:hdrs(),body:JSON.stringify(donnees)});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok) return d.erreur||`Erreur ${r.status}`;
+      setMaintenances(p=>p.map(x=>x.id===m.id?d.maintenance:x));
+      if(d.equipement) setEquipements(p=>p.map(e=>e.id===d.equipement.id?{...e,statut:d.equipement.statut,scoreRisque:d.equipement.scoreRisque}:e));
+      if(d.fiche){setFiches(p=>[d.fiche,...p]);try{telechargerPdfFiche(d.fiche);}catch{}}
+      setFicheEnCours(null);
+      toast(`✅ Fiche ${d.fiche?.numero||""} enregistrée — ${m.equipementNom} : ${d.equipement?.statut||""} (risque ${d.equipement?.scoreRisque??0}%)`);
+      rafraichirEnDirect();
+      return null;
+    }catch{return "Erreur réseau : la fiche n'a pas été enregistrée.";}
+  }
   async function changerStatutMaintenance(m,statut){
-    if(statut==="Terminée"&&!window.confirm(`Marquer la maintenance de « ${m.equipementNom} » comme terminée ?\n\nL'équipement repassera « En service » et son score de risque sera recalculé (les pannes et anomalies antérieures ne compteront plus).`)) return;
+    if(statut==="Terminée"){setFicheEnCours(m);return;}
     try{
       const r=await fetch(`${API}/maintenances/${m.id}/statut`,{method:"PATCH",headers:hdrs(),body:JSON.stringify({statut})});
       const d=await r.json();
@@ -1571,13 +1721,17 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
     doc.setTextColor(255,255,255);doc.setFontSize(18);doc.setFont("helvetica","bold");
     doc.text("Rapport Parc Biomedical",14,15);
     doc.setFontSize(10);doc.setFont("helvetica","normal");
-    doc.text(`Genere le ${now} par ${user.prenom} ${user.nom}`,14,25);
+    const auteur=`${user.prenom||""} ${user.nom||""}`.trim();
+    doc.text(`${organisation?.nom||""}`,14,25);
+    doc.text(`Exporté le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})} par ${auteur} (${user.role})`,14,31);
     doc.setTextColor(2,11,24);doc.setFontSize(13);doc.setFont("helvetica","bold");
     doc.text("Indicateurs cles",14,48);
     autoTable(doc,{startY:53,head:[["Indicateur","Valeur"]],body:[["Total",total],["En service",serv],["En maintenance",maint],["En panne",panne],["Disponibilite",dispo+"%"],["Risque critique",crit]],theme:"grid",headStyles:{fillColor:[0,40,30],textColor:255}});
     doc.text("Equipements",14,doc.lastAutoTable.finalY+12);
     autoTable(doc,{startY:doc.lastAutoTable.finalY+17,head:[["Nom","Marque","N Serie","Service","Statut","Risque"]],body:equipements.map(e=>[e.nom,e.marque||"-",e.numeroSerie,e.service||"-",e.statut,e.scoreRisque+"%"]),theme:"striped",headStyles:{fillColor:[0,40,30],textColor:255},styles:{fontSize:9}});
-    doc.save(`rapport_biomedical_${now.replace(/\//g,"-")}.pdf`);
+    const nbPages=doc.getNumberOfPages();
+    for(let i=1;i<=nbPages;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(120);doc.text(`Rapport exporté par ${auteur} — page ${i}/${nbPages}`,105,290,{align:"center"});}
+    doc.save(`rapport_biomedical_${now.replace(/\//g,"-")}_${nomFichier(auteur)||"utilisateur"}.pdf`);
     toast("✅ PDF exporté !");
   }
 
@@ -1599,6 +1753,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
     {id:"iot",icon:"📡",label:`IoT ${monitoringActif?"● Actif":"○ Inactif"}`},
     {id:"ia",icon:"🤖",label:"Intelligence IA"},
     {id:"alertes",icon:"🔔",label:`Alertes${alertesNonLues>0?` (${alertesNonLues})`:""}`,badge:alertesNonLues>0},
+    {id:"archives",icon:"🗂️",label:"Archives interventions"},
     ...(estAdmin&&estModeOrganisation?[{id:"utilisateurs",icon:"👥",label:"Utilisateurs"}]:[]),
   ];
 
@@ -1610,6 +1765,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
     iot:{title:"Surveillance IoT",sub:monitoringActif?"● Monitoring actif":"○ Monitoring inactif"},
     ia:{title:"Intelligence Artificielle",sub:"Prédiction de pannes & Détection d'anomalies"},
     alertes:{title:"Alertes & Risques",sub:`${alertesNonLues} alerte(s) non lue(s)`},
+    archives:{title:"Archives des interventions",sub:`${fiches.length} fiche(s) d'intervention enregistrée(s)`},
     utilisateurs:{title:"Gestion des utilisateurs",sub:`${utilisateurs.length} utilisateurs`},
   };
 
@@ -1628,6 +1784,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
     <div style={{...S.app,position:"relative"}}>
       <AnimatedBackground/>
       {message&&<div style={S.toast(message.type)}>{message.t}</div>}
+      {ficheEnCours&&<ModalFiche maint={ficheEnCours} equipement={equipements.find(e=>e.id===ficheEnCours.equipementId)} organisation={organisation} user={user} telephoneParDefaut={fiches[0]?.telephone||""} onAnnuler={()=>setFicheEnCours(null)} onValider={terminerAvecFiche}/>}
       <div style={S.sidebar}>
         <div style={S.sidebarTop}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
@@ -1659,7 +1816,8 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
         <div style={S.sub}>{titres[onglet]?.sub}</div>
         {onglet==="dashboard"&&<Dashboard equipements={equipements} maintenances={maintenances} pieStatuts={pieStatuts} barServices={barServices} pieMaint={pieMaint} total={total} serv={serv} maint={maint} panne={panne} dispo={dispo} crit={crit} exportPDF={exportPDF} setOnglet={setOnglet}/>}
         {onglet==="equipements"&&<Equipements equipements={equipements} peutModifier={peutModifier} supprimerEquipement={supprimerEquipement} changerEquipMonitoring={changerEquipMonitoring} setOnglet={setOnglet} token={token} charger={charger}/>}
-        {onglet==="maintenances"&&<Maintenances maintenances={maintenances} equipements={equipements} ajouterMaintenance={ajouterMaintenance} changerStatutMaintenance={changerStatutMaintenance}/>}
+        {onglet==="maintenances"&&<Maintenances maintenances={maintenances} equipements={equipements} ajouterMaintenance={ajouterMaintenance} changerStatutMaintenance={changerStatutMaintenance} fiches={fiches}/>}
+        {onglet==="archives"&&<Archives fiches={fiches}/>}
         {onglet==="calendrier"&&<Calendrier maintenances={maintenances}/>}
         {onglet==="iot"&&<IoT equipements={equipements} iotData={iotData} iotEquipId={iotEquipId} monitoringActif={monitoringActif} toggleMonitoring={toggleMonitoring} changerEquipMonitoring={changerEquipMonitoring} token={token} peutModifier={peutModifier}/>}
         {onglet==="ia"&&<ModuleIA equipements={equipements} token={token} setOnglet={setOnglet}/>}

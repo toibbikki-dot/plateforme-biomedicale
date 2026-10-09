@@ -222,6 +222,52 @@ function completerCodesIngenieur() {
 }
 
 // ════════════════════════════════════════════════════════════
+// MIGRATION — Fiches d'intervention (traçabilité des maintenances)
+// Les informations de l'équipement sont recopiées dans la fiche au moment
+// de l'intervention : la fiche reste exacte même si l'équipement est
+// renommé ou supprimé plus tard (archive).
+// ════════════════════════════════════════════════════════════
+{
+  const colsMaint = db.prepare("PRAGMA table_info(maintenances)").all().map(c => c.name);
+  if (!colsMaint.includes("dateDebut")) {
+    db.exec("ALTER TABLE maintenances ADD COLUMN dateDebut TEXT");
+    console.log("✅ Colonne dateDebut ajoutée");
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fiches_intervention (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      organisation_id INTEGER NOT NULL,
+      maintenance_id INTEGER UNIQUE,
+      equipement_id INTEGER,
+      numero TEXT NOT NULL,
+      annee INTEGER NOT NULL,
+      sequence INTEGER NOT NULL,
+      etablissement TEXT,
+      telephone TEXT,
+      equipement_nom TEXT,
+      marque TEXT,
+      numero_serie TEXT,
+      lieu TEXT,
+      type_maintenance TEXT,
+      date_debut TEXT,
+      date_fin TEXT,
+      travaux TEXT NOT NULL,
+      pieces TEXT,
+      etat_final TEXT NOT NULL,
+      technicien_nom TEXT NOT NULL,
+      technicien_date TEXT,
+      client_nom TEXT,
+      client_date TEXT,
+      cree_par INTEGER,
+      cree_par_nom TEXT,
+      createdAt TEXT DEFAULT (datetime('now','localtime')),
+      UNIQUE (organisation_id, annee, sequence)
+    );
+    CREATE INDEX IF NOT EXISTS idx_fiches_org ON fiches_intervention(organisation_id);
+  `);
+}
+
+// ════════════════════════════════════════════════════════════
 // SCORE DE RISQUE — recalculé (et non additionné à l'infini)
 // Fenêtre : événements depuis la dernière maintenance terminée,
 // sur 30 jours au maximum.
@@ -683,12 +729,13 @@ function appliquerStatutMaintenance(equipementId, statut) {
 app.post("/api/maintenances", (req, res) => {
   const { equipementId, equipementNom, type, statut, datePlanifiee, technicien, description } = req.body;
   const st = STATUTS_MAINTENANCE.includes(statut) ? statut : "Planifiée";
+  if (st === "Terminée") return res.status(400).json({ erreur: "Une maintenance se termine avec sa fiche d'intervention : créez-la « Planifiée » ou « En cours »" });
   // Cloisonnement : l'équipement doit appartenir à l'organisation
   if (!db.prepare("SELECT id FROM equipements WHERE id=? AND organisation_id=?").get(equipementId, req.user.organisation_id))
     return res.status(404).json({ erreur: "Équipement introuvable dans votre organisation" });
   try {
     const creer = db.transaction(() => {
-      const result = db.prepare("INSERT INTO maintenances (organisation_id,equipementId,equipementNom,type,statut,datePlanifiee,technicien,description,dateTerminee) VALUES (?,?,?,?,?,?,?,?, CASE WHEN ?='Terminée' THEN datetime('now','localtime') ELSE NULL END)")
+      const result = db.prepare("INSERT INTO maintenances (organisation_id,equipementId,equipementNom,type,statut,datePlanifiee,technicien,description,dateDebut) VALUES (?,?,?,?,?,?,?,?, CASE WHEN ?='En cours' THEN datetime('now','localtime') ELSE NULL END)")
         .run(req.user.organisation_id, equipementId, equipementNom, type||"Préventive", st, datePlanifiee, technicien, description, st);
       appliquerStatutMaintenance(equipementId, st);
       return result.lastInsertRowid;
@@ -702,16 +749,89 @@ app.post("/api/maintenances", (req, res) => {
 app.patch("/api/maintenances/:id/statut", (req, res) => {
   const { statut } = req.body;
   if (!STATUTS_MAINTENANCE.includes(statut)) return res.status(400).json({ erreur: "Statut invalide (Planifiée, En cours ou Terminée)" });
+  if (statut === "Terminée") return res.status(400).json({ erreur: "Pour terminer une maintenance, remplissez la fiche d'intervention" });
   const maint = db.prepare("SELECT * FROM maintenances WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id);
   if (!maint) return res.status(404).json({ erreur: "Maintenance introuvable dans votre organisation" });
   try {
     db.transaction(() => {
-      db.prepare("UPDATE maintenances SET statut=?, dateTerminee=CASE WHEN ?='Terminée' THEN datetime('now','localtime') ELSE NULL END WHERE id=?").run(statut, statut, maint.id);
+      db.prepare(`UPDATE maintenances SET statut=?,
+          dateTerminee=CASE WHEN ?='Terminée' THEN datetime('now','localtime') ELSE NULL END,
+          dateDebut=CASE WHEN ?='En cours' THEN datetime('now','localtime') ELSE dateDebut END
+        WHERE id=?`).run(statut, statut, statut, maint.id);
       if (maint.equipementId) appliquerStatutMaintenance(maint.equipementId, statut);
     })();
     const equip = maint.equipementId ? db.prepare("SELECT id, statut, scoreRisque FROM equipements WHERE id=?").get(maint.equipementId) : null;
     res.json({ maintenance: db.prepare("SELECT * FROM maintenances WHERE id=?").get(maint.id), equipement: equip });
   } catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
+// ── Fiches d'intervention ───────────────────────────────────
+const ETATS_FINAUX = ["Fonctionnel", "Non fonctionnel"];
+const champ = (v, max = 2000) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+// Terminer une maintenance en remplissant sa fiche d'intervention
+app.post("/api/maintenances/:id/terminer", (req, res) => {
+  const b = req.body || {};
+  const travaux = champ(b.travaux, 5000), technicien_nom = champ(b.technicien_nom, 120);
+  const etat_final = ETATS_FINAUX.includes(b.etat_final) ? b.etat_final : null;
+  if (!travaux) return res.status(400).json({ erreur: "Décrivez les travaux effectués" });
+  if (!technicien_nom) return res.status(400).json({ erreur: "Le nom de l'intervenant est obligatoire" });
+  if (!etat_final) return res.status(400).json({ erreur: "Indiquez l'état de l'équipement après l'intervention" });
+  const date_debut = champ(b.date_debut, 30) || null, date_fin = champ(b.date_fin, 30) || null;
+  if (date_debut && date_fin && date_debut > date_fin) return res.status(400).json({ erreur: "La date de fin doit être après la date de début" });
+
+  const orgId = req.user.organisation_id;
+  const maint = db.prepare("SELECT * FROM maintenances WHERE id=? AND organisation_id=?").get(req.params.id, orgId);
+  if (!maint) return res.status(404).json({ erreur: "Maintenance introuvable dans votre organisation" });
+  if (maint.statut === "Terminée") return res.status(409).json({ erreur: "Cette maintenance est déjà terminée" });
+
+  try {
+    const terminer = db.transaction(() => {
+      const equip = maint.equipementId ? db.prepare("SELECT * FROM equipements WHERE id=? AND organisation_id=?").get(maint.equipementId, orgId) : null;
+      const org = db.prepare("SELECT nom FROM organisations WHERE id=?").get(orgId);
+      const auteur = db.prepare("SELECT prenom, nom FROM utilisateurs WHERE id=?").get(req.user.id) || {};
+      const annee = new Date().getFullYear();
+      const sequence = (db.prepare("SELECT MAX(sequence) AS m FROM fiches_intervention WHERE organisation_id=? AND annee=?").get(orgId, annee).m || 0) + 1;
+      const numero = `FI-${annee}-${String(sequence).padStart(4, "0")}`;
+      const ficheId = db.prepare(`INSERT INTO fiches_intervention
+        (organisation_id, maintenance_id, equipement_id, numero, annee, sequence, etablissement, telephone,
+         equipement_nom, marque, numero_serie, lieu, type_maintenance, date_debut, date_fin, travaux, pieces,
+         etat_final, technicien_nom, technicien_date, client_nom, client_date, cree_par, cree_par_nom)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+          orgId, maint.id, maint.equipementId, numero, annee, sequence, org?.nom || "", champ(b.telephone, 40),
+          equip?.nom || maint.equipementNom || "", equip?.marque || "", equip?.numeroSerie || "", equip?.service || "",
+          maint.type || "", date_debut || maint.dateDebut || null, date_fin, travaux, champ(b.pieces, 2000),
+          etat_final, technicien_nom, champ(b.technicien_date, 10) || null, champ(b.client_nom, 120), champ(b.client_date, 10) || null,
+          req.user.id, `${auteur.prenom || ""} ${auteur.nom || ""}`.trim()
+        ).lastInsertRowid;
+
+      db.prepare("UPDATE maintenances SET statut='Terminée', dateTerminee=datetime('now','localtime'), technicien=COALESCE(NULLIF(technicien,''), ?) WHERE id=?").run(technicien_nom, maint.id);
+      if (equip) {
+        if (etat_final === "Fonctionnel") appliquerStatutMaintenance(equip.id, "Terminée");
+        else { db.prepare("UPDATE equipements SET statut='En panne' WHERE id=?").run(equip.id); recalculerScore(equip.id); }
+      }
+      return ficheId;
+    });
+    const ficheId = terminer();
+    const equipement = maint.equipementId ? db.prepare("SELECT id, statut, scoreRisque FROM equipements WHERE id=?").get(maint.equipementId) : null;
+    res.json({
+      maintenance: db.prepare("SELECT * FROM maintenances WHERE id=?").get(maint.id),
+      equipement,
+      fiche: db.prepare("SELECT * FROM fiches_intervention WHERE id=?").get(ficheId),
+    });
+  } catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
+// Archive des fiches d'intervention de l'organisation
+app.get("/api/fiches", (req, res) => {
+  try { res.json(db.prepare("SELECT * FROM fiches_intervention WHERE organisation_id=? ORDER BY id DESC").all(req.user.organisation_id)); }
+  catch (err) { res.status(500).json({ erreur: err.message }); }
+});
+
+app.get("/api/fiches/:id", (req, res) => {
+  const f = db.prepare("SELECT * FROM fiches_intervention WHERE id=? AND organisation_id=?").get(req.params.id, req.user.organisation_id);
+  if (!f) return res.status(404).json({ erreur: "Fiche introuvable dans votre organisation" });
+  res.json(f);
 });
 
 // Détail du score de risque d'un équipement (d'où viennent les points)
