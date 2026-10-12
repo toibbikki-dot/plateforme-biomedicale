@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.vercel.plateforme_biomedicale.twa",
+        "sha256_cert_fingerprints": ["2D:0C:DE:D8:DE:1F:12:97:58:C8:4B:45:2F:0D:65:FB:73:84:F2:3B:03:0F:00:F6:44:0C:36:45:78:EC:01:51"]
+      }
+    }]
