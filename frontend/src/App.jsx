@@ -129,6 +129,33 @@ function SelecteurTri({tris,valeur,onChange,style}){
   );
 }
 
+// ── Bouton « Installer l'application » (PWA) ─────────────────
+function BoutonInstaller(){
+  const estInstallee=()=>{try{return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;}catch{return false;}};
+  const [dispo,setDispo]=useState(()=>!!window.__bmInstallation);
+  const [installee,setInstallee]=useState(estInstallee);
+  const [aideIOS,setAideIOS]=useState(false);
+  const estIOS=/iphone|ipad|ipod/i.test(navigator.userAgent||"");
+  useEffect(()=>{
+    const ok=()=>setDispo(true), fini=()=>{setInstallee(true);setDispo(false);};
+    window.addEventListener("bm-installation-dispo",ok);window.addEventListener("appinstalled",fini);
+    return()=>{window.removeEventListener("bm-installation-dispo",ok);window.removeEventListener("appinstalled",fini);};
+  },[]);
+  if(installee||(!dispo&&!estIOS)) return null;
+  async function installer(){
+    if(estIOS&&!window.__bmInstallation){setAideIOS(v=>!v);return;}
+    const ev=window.__bmInstallation;if(!ev) return;
+    ev.prompt();try{await ev.userChoice;}catch{}
+    window.__bmInstallation=null;setDispo(false);
+  }
+  return(
+    <div style={{marginBottom:10}}>
+      <button type="button" onClick={installer} style={{width:"100%",background:"rgba(0,212,170,0.1)",color:"#00A585",border:"1px solid rgba(0,212,170,0.35)",padding:"9px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}}>📲 Installer l'application</button>
+      {aideIOS&&<div style={{fontSize:11,color:"var(--muted)",marginTop:6,lineHeight:1.4}}>Sur iPhone : touchez <b>Partager</b> ⬆️ dans Safari, puis <b>« Sur l'écran d'accueil »</b>.</div>}
+    </div>
+  );
+}
+
 // ── Choix du thème de couleur ────────────────────────────────
 const THEMES=[
   {id:"sombre",label:"Sombre",fond:"#041225",bord:"#00D4AA"},
@@ -1696,6 +1723,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
   const [fiches,setFiches]=useState([]);
   const [estProprietaire,setEstProprietaire]=useState(false);
   const [menuOuvert,setMenuOuvert]=useState(false); // menu ☰ sur téléphone
+  function allerAccueil(){setOnglet("dashboard");setMenuOuvert(false);window.scrollTo(0,0);}
   const [ficheEnCours,setFicheEnCours]=useState(null); // maintenance en train d'être terminée
   const [chargement,setChargement]=useState(true);
   const [message,setMessage]=useState(null);
@@ -1875,7 +1903,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
       {/* Barre du haut et fond du menu : visibles seulement sur téléphone (voir mobile.css) */}
       <div className="bm-topbar">
         <button type="button" aria-label="Menu" className="bm-burger" onClick={()=>setMenuOuvert(true)}>☰</button>
-        <img src={logoEmbleme} alt="" style={{width:30,height:"auto"}}/>
+        <img src={logoEmbleme} alt="Tableau de bord" title="Tableau de bord" onClick={allerAccueil} style={{width:30,height:"auto",cursor:"pointer"}}/>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:14,fontWeight:800,color:"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{titres[onglet]?.title}</div>
           <div style={{fontSize:10,color:"var(--muted)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>BIKIBioMed · {organisation?.nom||""}</div>
@@ -1885,7 +1913,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
       {menuOuvert&&<div className="bm-voile" onClick={()=>setMenuOuvert(false)}/>}
       <div className={`bm-sidebar${menuOuvert?" ouvert":""}`} style={S.sidebar}>
         <div style={S.sidebarTop}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+          <div onClick={allerAccueil} title="Retour au tableau de bord" style={{display:"flex",alignItems:"center",gap:10,marginBottom:4,cursor:"pointer"}}>
             <img src={logoEmbleme} alt="" style={{width:40,height:"auto",flexShrink:0}}/>
             <div><div style={S.sidebarTitle}>BIKIBioMed</div><div style={S.sidebarSub}>{organisation?.nom||"Gestion Biomédicale"}</div></div>
           </div>
@@ -1905,6 +1933,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
         </nav>
         <div style={{padding:"12px 20px",borderTop:"1px solid rgba(0,212,170,0.08)"}}>
           <SelecteurTheme/>
+          <BoutonInstaller/>
           <button onClick={onLogout} style={{width:"100%",background:"var(--w03)",color:"var(--muted)",border:"1px solid var(--w06)",padding:"9px",borderRadius:8,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>🚪 Se déconnecter</button>
           <div style={{fontSize:9,color:"var(--muted-4)",textAlign:"center",marginTop:8,letterSpacing:"0.05em"}}>v9.0.0 ✅ IA INTÉGRÉE</div>
         </div>
