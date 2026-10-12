@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, RadialBarChart, RadialBar } from "recharts";
 import { telechargerPdfFiche, formaterDateHeure, nomFichier } from "./fichePdf";
 import { creerRapport, SECTIONS_RAPPORT, PERIODES_RAPPORT } from "./rapportPdf";
+import "./mobile.css";
 import { chargerLogoPdf } from "./fichePdf";
 import logoComplet from "./assets/logo-bikibiomed.png";
 import logoEmbleme from "./assets/logo-embleme.png";
@@ -416,7 +417,7 @@ function PageInscription({onLogin,onRetourConnexion}) {
           <h2 style={{color:"var(--text)",fontSize:20,margin:0}}>{t.titre}</h2>
         </div>
         <div style={{background:"var(--panel-bg)",backdropFilter:"blur(20px)",borderRadius:20,padding:"32px",border:"1px solid rgba(0,212,170,0.15)",boxShadow:"0 25px 60px rgba(0,0,0,0.5)"}}>
-          <div style={S.fgrid}>
+          <div className="bm-fgrid" style={S.fgrid}>
             <div><label style={S.lbl}>Nom *</label><input style={S.inp} value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div>
             <div><label style={S.lbl}>Prénom</label><input style={S.inp} value={form.prenom} onChange={e=>setForm(p=>({...p,prenom:e.target.value}))}/></div>
           </div>
@@ -595,7 +596,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
 
       {/* Stats globales */}
       {statsIA && (
-        <div style={S.kgrid}>
+        <div className="bm-kgrid" style={S.kgrid}>
           {[
             {v:statsIA.total_equipements, l:"Total équipements", c:"#3B82F6"},
             {v:statsIA.risque_critique, l:"Risque critique", c:"#FF4D6D"},
@@ -611,9 +612,9 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
         </div>
       )}
 
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:24}}>
+      <div className="bm-grid2" style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:24}}>
         {/* Analyse par équipement */}
-        <div style={S.card}>
+        <div className="bm-card" style={S.card}>
           <div style={S.cardTitle}>🔍 Analyser un équipement</div>
           <SelecteurTri tris={TRIS_EQUIPEMENT} valeur={triIA} onChange={setTriIA} style={{maxWidth:"100%",marginBottom:12}}/>
           <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.06em",padding:"0 14px",marginBottom:6}}>
@@ -646,7 +647,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
         </div>
 
         {/* Résultat prédiction */}
-        <div style={S.card}>
+        <div className="bm-card" style={S.card}>
           <div style={S.cardTitle}>📊 Résultat de l'analyse IA</div>
           {chargement ? (
             <div style={{textAlign:"center", padding:40, color:"var(--muted)"}}>
@@ -723,9 +724,9 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
 
       {/* Liste prédictions */}
       {predictions.length > 0 && (
-        <div style={S.card}>
+        <div className="bm-card" style={S.card}>
           <div style={S.cardTitle}>📋 Résultats — Tous les équipements ({predictions.length})</div>
-          <table style={S.tbl}>
+          <table className="bm-table" style={S.tbl}>
             <thead>
               <tr>{["Équipement","Score IA","Niveau","Délai estimé","Recommandation","Action"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
             </thead>
@@ -766,7 +767,7 @@ const ModuleIA = memo(({equipements, token, setOnglet}) => {
 
 const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMaint,total,serv,maint,panne,dispo,crit,exportPDF,setOnglet,estProprietaire,telechargerSauvegarde})=>(
   <div>
-    <div style={S.kgrid}>
+    <div className="bm-kgrid" style={S.kgrid}>
       {[
         {v:total,l:"Total équipements",c:"#3B82F6"},
         {v:serv,l:"En service",c:"#00D4AA"},
@@ -787,8 +788,8 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
       <button style={S.btn("#7C3AED")} onClick={()=>setOnglet("iot")}>📡 Surveillance IoT</button>
       <button style={S.btn("#F59E0B")} onClick={()=>setOnglet("ia")}>🤖 Analyse IA</button>
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24,marginBottom:24}}>
-      <div style={S.card}>
+    <div className="bm-grid2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24,marginBottom:24}}>
+      <div className="bm-card" style={S.card}>
         <div style={S.cardTitle}>📊 Répartition par statut</div>
         <ResponsiveContainer width="100%" height={220}>
           <PieChart>
@@ -800,7 +801,7 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <div style={S.card}>
+      <div className="bm-card" style={S.card}>
         <div style={S.cardTitle}>🏥 Équipements par service</div>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={barServices}>
@@ -812,8 +813,8 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
         </ResponsiveContainer>
       </div>
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
-      <div style={S.card}>
+    <div className="bm-grid2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+      <div className="bm-card" style={S.card}>
         <div style={S.cardTitle}>🔧 Statut maintenances</div>
         <ResponsiveContainer width="100%" height={200}>
           <PieChart>
@@ -824,7 +825,7 @@ const Dashboard = memo(({equipements,maintenances,pieStatuts,barServices,pieMain
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <div style={S.card}>
+      <div className="bm-card" style={S.card}>
         <div style={S.cardTitle}>⚠️ Risques élevés</div>
         {equipements.filter(e=>e.scoreRisque>=50).sort((a,b)=>b.scoreRisque-a.scoreRisque).slice(0,4).map(e=>(
           <div key={e.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--w04)"}}>
@@ -972,8 +973,8 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
     <div>
       {/* Modal configuration */}
       {showConfigModal&&(
-        <div style={S.overlay}>
-          <div style={{...S.modal,maxWidth:600}}>
+        <div className="bm-overlay" style={S.overlay}>
+          <div className="bm-modal" style={{...S.modal,maxWidth:600}}>
             <h3 style={{marginBottom:8,color:"var(--text)"}}>⚙️ Configurer les capteurs</h3>
             <div style={{background:"rgba(0,212,170,0.08)",border:"1px solid rgba(0,212,170,0.2)",borderRadius:8,padding:"10px 14px",marginBottom:20}}>
               <span style={{fontSize:12,color:"var(--muted)"}}>Équipement : </span>
@@ -996,7 +997,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
               return(
                 <div key={idx} style={{border:"1px solid var(--w06)",borderRadius:10,padding:"14px 14px 2px",marginBottom:12}}>
                   <div style={{fontSize:12,fontWeight:700,color:"#A78BFA",marginBottom:10}}>Capteur {idx} — param{idx}</div>
-                  <div style={{...S.fgrid,marginBottom:12}}>
+                  <div className="bm-fgrid" style={{...S.fgrid,marginBottom:12}}>
                     <div>
                       <label style={S.lbl}>Nom</label>
                       <input style={S.inp} value={configForm[`param${idx}_nom`]}
@@ -1012,7 +1013,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
                       />
                     </div>
                   </div>
-                  <div style={{...S.fgrid,marginBottom:12}}>
+                  <div className="bm-fgrid" style={{...S.fgrid,marginBottom:12}}>
                     <div>
                       <label style={S.lbl}>Seuil min</label>
                       <input style={S.inp} type="number" step="any" value={configForm[`param${idx}_min`]}
@@ -1072,7 +1073,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
 
       {/* Clé d'appareil ESP32 (réservée à l'administrateur et à l'ingénieur) */}
       {peutModifier&&equipementActuel&&(
-        <div style={S.card}>
+        <div className="bm-card" style={S.card}>
           <div style={S.cardTitle}>🔑 Clé de l'appareil ESP32 — {equipementActuel.nom}</div>
           <div style={{fontSize:13,color:"var(--muted-2)",marginBottom:14,lineHeight:1.6}}>
             Cette clé secrète identifie l'ESP32 installé sur cet équipement. Copiez-la dans le programme Arduino
@@ -1098,7 +1099,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
 
       {monitoringActif?(
         <>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:16,marginBottom:24}}>
+          <div className="bm-kgrid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:16,marginBottom:24}}>
             <div style={{background:"rgba(0,212,170,0.08)",border:"1px solid rgba(0,212,170,0.2)",borderRadius:12,padding:20,textAlign:"center"}}>
               <div style={{fontSize:32}}>{dernier?.etat?"⚡":"💤"}</div>
               <div style={{fontSize:28,fontWeight:900,color:dernier?.etat?"#00D4AA":"var(--muted)",marginTop:4}}>{dernier?.etat?"Actif":"Inactif"}</div>
@@ -1140,7 +1141,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
             })}
           </div>
           {chartData.length>0&&capteursConfig&&(
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(400px,1fr))",gap:24}}>
+            <div className="bm-grid2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(400px,1fr))",gap:24}}>
               {[...Array(capteursConfig.nb_capteurs_actifs||2)].map((_,i)=>{
                 const idx=i+1;
                 const nom=capteursConfig[`param${idx}_nom`]||`Paramètre ${idx}`;
@@ -1177,7 +1178,7 @@ const IoT = memo(({equipements,iotData,iotEquipId,monitoringActif,toggleMonitori
         {iotData.length===0?(
           <div style={{textAlign:"center",padding:32,color:"var(--muted-3)"}}><div style={{fontSize:32,marginBottom:8}}>📂</div><div>Aucune donnée disponible</div></div>
         ):(
-          <table style={S.tbl}>
+          <table className="bm-table" style={S.tbl}>
             <thead>
               <tr>
                 <th style={S.th}>Date & Heure</th>
@@ -1260,8 +1261,8 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
         <SelecteurTri tris={TRIS_EQUIPEMENT} valeur={triEq} onChange={setTriEq}/>
         {peutModifier&&<button style={S.btn()} onClick={ouvrirAjout}>+ Ajouter</button>}
       </div>
-      <div style={S.card}>
-        <table style={S.tbl}>
+      <div className="bm-card" style={S.card}>
+        <table className="bm-table" style={S.tbl}>
           <thead><tr>{["Équipement","N° Série","Service","Ancienneté","Statut","Risque","Proch. Maint.","Actions"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
           <tbody>
             {listeTriee.map(e=>(
@@ -1295,10 +1296,10 @@ const Equipements = memo(({equipements,peutModifier,supprimerEquipement,changerE
         {filtres.length===0&&<div style={{textAlign:"center",padding:40,color:"var(--muted-3)"}}>Aucun équipement trouvé</div>}
       </div>
       {showForm&&(
-        <div style={S.overlay}>
-          <div style={S.modal}>
+        <div className="bm-overlay" style={S.overlay}>
+          <div className="bm-modal" style={S.modal}>
             <h3 style={{marginBottom:20,color:"var(--text)",fontSize:18}}>{enEdition?"✏️ Modifier l'équipement":"➕ Nouvel équipement"}</h3>
-            <div style={S.fgrid}>
+            <div className="bm-fgrid" style={S.fgrid}>
               <div><label style={S.lbl}>Nom *</label><input style={S.inp} placeholder="Ex: Electrocardiographe" value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div>
               <div><label style={S.lbl}>Marque</label><input style={S.inp} placeholder="Ex: GE Healthcare" value={form.marque} onChange={e=>setForm(p=>({...p,marque:e.target.value}))}/></div>
               <div><label style={S.lbl}>N° Série *</label><input style={S.inp} placeholder="Ex: ECG-2024-001" value={form.numeroSerie} onChange={e=>setForm(p=>({...p,numeroSerie:e.target.value}))}/></div>
@@ -1333,8 +1334,8 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerS
         <button style={S.btn()} onClick={()=>setShowForm(true)}>+ Planifier une maintenance</button>
         <SelecteurTri tris={TRIS_MAINTENANCE} valeur={triM} onChange={setTriM}/>
       </div>
-      <div style={S.card}>
-        <table style={S.tbl}>
+      <div className="bm-card" style={S.card}>
+        <table className="bm-table" style={S.tbl}>
           <thead><tr>{["Équipement","Type","Date","Technicien","Description","Statut","Action"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
           <tbody>
             {listeTriee.map(m=>(
@@ -1367,10 +1368,10 @@ const Maintenances = memo(({maintenances,equipements,ajouterMaintenance,changerS
         {maintenances.length===0&&<div style={{textAlign:"center",padding:40,color:"var(--muted-3)"}}>Aucune maintenance</div>}
       </div>
       {showForm&&(
-        <div style={S.overlay}>
-          <div style={S.modal}>
+        <div className="bm-overlay" style={S.overlay}>
+          <div className="bm-modal" style={S.modal}>
             <h3 style={{marginBottom:20,color:"var(--text)",fontSize:18}}>🔧 Planifier une maintenance</h3>
-            <div style={S.fgrid}>
+            <div className="bm-fgrid" style={S.fgrid}>
               <div style={{gridColumn:"1 / -1"}}><label style={S.lbl}>Équipement *</label>
                 <select style={S.sel} value={form.equipementId} onChange={e=>setForm(p=>({...p,equipementId:e.target.value}))}>
                   <option value="">-- Sélectionner --</option>
@@ -1419,8 +1420,8 @@ function ModalFiche({maint,equipement,organisation,user,telephoneParDefaut,onAnn
   const titreBloc={fontSize:11,fontWeight:800,letterSpacing:"0.08em",color:"var(--muted)",textTransform:"uppercase",marginBottom:10,textAlign:"center"};
   const info=(l,v)=><div style={{fontSize:13,marginBottom:4}}><span style={{color:"var(--muted)"}}>{l} : </span><b style={{color:"var(--text)"}}>{v||"—"}</b></div>;
   return(
-    <div style={S.overlay}>
-      <div style={{...S.modal,maxWidth:720,maxHeight:"92vh",overflowY:"auto"}}>
+    <div className="bm-overlay" style={S.overlay}>
+      <div className="bm-modal" style={{...S.modal,maxWidth:720,maxHeight:"92vh",overflowY:"auto"}}>
         <h3 style={{marginBottom:4,color:"var(--text)",fontSize:18}}>📝 Fiche d'intervention</h3>
         <div style={{fontSize:12,color:"var(--muted)",marginBottom:16}}>Remplissez la fiche pour terminer la maintenance. Le numéro de fiche est attribué automatiquement à l'enregistrement.</div>
         <div style={bloc}>
@@ -1435,7 +1436,7 @@ function ModalFiche({maint,equipement,organisation,user,telephoneParDefaut,onAnn
         <div style={bloc}>
           <div style={titreBloc}>Intervention</div>
           {info("Type de maintenance",maint.type)}
-          <div style={S.fgrid}>
+          <div className="bm-fgrid" style={S.fgrid}>
             <div><label style={S.lbl}>Début</label><input style={S.inp} type="datetime-local" value={form.date_debut} onChange={e=>maj("date_debut",e.target.value)}/></div>
             <div><label style={S.lbl}>Fin</label><input style={S.inp} type="datetime-local" value={form.date_fin} onChange={e=>maj("date_fin",e.target.value)}/></div>
           </div>
@@ -1452,7 +1453,7 @@ function ModalFiche({maint,equipement,organisation,user,telephoneParDefaut,onAnn
         </div>
         <div style={bloc}>
           <div style={titreBloc}>Visa</div>
-          <div style={S.fgrid}>
+          <div className="bm-fgrid" style={S.fgrid}>
             <div><label style={S.lbl}>Technicien / ingénieur intervenant *</label><input style={S.inp} placeholder="Prénom et NOM" value={form.technicien_nom} onChange={e=>maj("technicien_nom",e.target.value)}/></div>
             <div><label style={S.lbl}>Date (technicien)</label><input style={S.inp} type="date" value={form.technicien_date} onChange={e=>maj("technicien_date",e.target.value)}/></div>
             <div><label style={S.lbl}>Client (responsable du service)</label><input style={S.inp} placeholder="Prénom et NOM" value={form.client_nom} onChange={e=>maj("client_nom",e.target.value)}/></div>
@@ -1481,8 +1482,8 @@ function ModalExport({onAnnuler,onGenerer}){
     onGenerer(periode,SECTIONS_RAPPORT.map(s=>s.id).filter(id=>choix.includes(id)));
   }
   return(
-    <div style={S.overlay}>
-      <div style={{...S.modal,maxWidth:520}}>
+    <div className="bm-overlay" style={S.overlay}>
+      <div className="bm-modal" style={{...S.modal,maxWidth:520}}>
         <h3 style={{marginBottom:4,color:"var(--text)",fontSize:18}}>📄 Exporter le rapport PDF</h3>
         <div style={{fontSize:12,color:"var(--muted)",marginBottom:16}}>Choisissez la période et les parties à inclure. Une page de garde est toujours ajoutée.</div>
         <label style={S.lbl}>Période</label>
@@ -1523,9 +1524,9 @@ const Archives = memo(({fiches,estAdmin,supprimerFiche})=>{
         <input style={{...S.inp,maxWidth:300}} placeholder="🔍 N° de fiche, équipement, intervenant…" value={recherche} onChange={e=>setRecherche(e.target.value)}/>
         <SelecteurTri tris={TRIS_FICHE} valeur={tri} onChange={setTri}/>
       </div>
-      <div style={S.card}>
+      <div className="bm-card" style={S.card}>
         <div style={{overflowX:"auto"}}>
-        <table style={S.tbl}>
+        <table className="bm-table" style={S.tbl}>
           <thead><tr>{["Fiche","Équipement","Service / type","Intervenant","État final","Actions"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
           <tbody>
             {liste.map(f=>(
@@ -1551,6 +1552,7 @@ const Archives = memo(({fiches,estAdmin,supprimerFiche})=>{
 
 const Calendrier = memo(({maintenances})=>{
   const [moisCal,setMoisCal]=useState(new Date());
+  const [jourChoisi,setJourChoisi]=useState(null); // jour touché : son détail s'affiche sous le calendrier
   function joursDuMois(d){const y=d.getFullYear(),m=d.getMonth();const p=new Date(y,m,1),l=new Date(y,m+1,0);const j=[];for(let i=0;i<(p.getDay()+6)%7;i++) j.push(null);for(let dd=1;dd<=l.getDate();dd++) j.push(new Date(y,m,dd));return j;}
   const jours=joursDuMois(moisCal);
   const nomsJ=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
@@ -1563,8 +1565,8 @@ const Calendrier = memo(({maintenances})=>{
   return(
     <div>
       {retard.length>0&&(<div style={{background:"rgba(255,77,109,0.08)",border:"1px solid rgba(255,77,109,0.2)",borderRadius:10,padding:16,marginBottom:20}}><div style={{fontWeight:700,color:"#FF4D6D",marginBottom:8}}>⚠️ {retard.length} maintenance(s) en retard !</div>{retard.map(m=><div key={m.id} style={{fontSize:13,color:"rgba(255,77,109,0.8)"}}>• {m.equipementNom} — prévu le {m.datePlanifiee}</div>)}</div>)}
-      <div style={S.card}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+      <div className="bm-card" style={S.card}>
+        <div className="bm-cal-entete" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,gap:8}}>
           <button style={S.btnO} onClick={()=>setMoisCal(new Date(moisCal.getFullYear(),moisCal.getMonth()-1))}>← Précédent</button>
           <div style={{fontSize:18,fontWeight:700,color:"var(--text)",textTransform:"capitalize"}}>{moisCal.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div>
           <button style={S.btnO} onClick={()=>setMoisCal(new Date(moisCal.getFullYear(),moisCal.getMonth()+1))}>Suivant →</button>
@@ -1574,9 +1576,21 @@ const Calendrier = memo(({maintenances})=>{
           {jours.map((date,i)=>{
             const maints=date?maintenances.filter(m=>m.datePlanifiee===jourISO(date)):[];
             const auj=date&&date.toDateString()===new Date().toDateString();
-            return(<div key={i} style={{minHeight:68,padding:6,minWidth:0,overflow:"hidden",borderRadius:8,background:auj?"rgba(0,212,170,0.08)":date?"var(--w02)":"transparent",border:auj?"1px solid rgba(0,212,170,0.3)":date?"1px solid var(--w04)":"none"}}>{date&&<><div style={{fontSize:13,fontWeight:auj?700:400,color:auj?"#00D4AA":"var(--muted-2)"}}>{date.getDate()}</div>{maints.map(m=><div key={m.id} title={`${m.equipementNom} — ${m.type} (${m.statut})`} style={{fontSize:9,padding:"2px 4px",borderRadius:3,marginTop:2,background:m.type==="Préventive"?"rgba(59,130,246,0.2)":"rgba(255,77,109,0.15)",color:m.type==="Préventive"?"#60A5FA":"#FF4D6D",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔧 {m.equipementNom}</div>)}</>}</div>);
+            const choisi=date&&jourChoisi===jourISO(date);
+            return(<div key={i} className="bm-cal-jour" onClick={()=>date&&setJourChoisi(choisi?null:jourISO(date))} style={{cursor:date?"pointer":"default",outline:choisi?"2px solid #3B82F6":"none",minHeight:68,padding:6,minWidth:0,overflow:"hidden",borderRadius:8,background:auj?"rgba(0,212,170,0.08)":date?"var(--w02)":"transparent",border:auj?"1px solid rgba(0,212,170,0.3)":date?"1px solid var(--w04)":"none"}}>{date&&<><div style={{fontSize:13,fontWeight:auj?700:400,color:auj?"#00D4AA":"var(--muted-2)"}}>{date.getDate()}</div>{maints.map(m=><div key={m.id} className="bm-cal-item" title={`${m.equipementNom} — ${m.type} (${m.statut})`} style={{fontSize:9,padding:"2px 4px",borderRadius:3,marginTop:2,background:m.type==="Préventive"?"rgba(59,130,246,0.2)":"rgba(255,77,109,0.15)",color:m.type==="Préventive"?"#60A5FA":"#FF4D6D",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔧 {m.equipementNom}</div>)}</>}</div>);
           })}
         </div>
+        {jourChoisi&&(()=>{
+          const liste=maintenances.filter(m=>m.datePlanifiee===jourChoisi);
+          return(<div style={{marginTop:16,borderTop:"1px solid var(--w06)",paddingTop:12}}>
+            <div style={{fontWeight:700,color:"var(--text)",marginBottom:8,fontSize:14}}>📅 {formaterDateHeure(jourChoisi)} — {liste.length} maintenance(s)</div>
+            {liste.length===0&&<div style={{fontSize:13,color:"var(--muted)"}}>Aucune maintenance prévue ce jour-là.</div>}
+            {liste.map(m=><div key={m.id} style={{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap",padding:"8px 10px",marginBottom:6,borderRadius:8,background:"var(--w02)",border:"1px solid var(--w05)",fontSize:13}}>
+              <span style={{color:"var(--text)",fontWeight:600}}>🔧 {m.equipementNom}</span>
+              <span style={{color:"var(--muted)"}}>{m.type} · {m.technicien||"—"} · <b>{m.statut}</b></span>
+            </div>)}
+          </div>);
+        })()}
       </div>
     </div>
   );
@@ -1584,7 +1598,7 @@ const Calendrier = memo(({maintenances})=>{
 
 const Alertes = memo(({alertes,equipements,lireAlerte,setOnglet})=>(
   <div>
-    {alertes.length>0&&(<div style={S.card}><div style={S.cardTitle}>🔔 Alertes automatiques</div>{alertes.slice(0,10).map(a=>(<div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",marginBottom:8,borderRadius:8,background:a.estLue?"var(--w02)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.06)":a.severite==="INFO"?"rgba(0,212,170,0.06)":"rgba(245,158,11,0.06)",border:`1px solid ${a.estLue?"var(--w05)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.2)":a.severite==="INFO"?"rgba(0,212,170,0.2)":"rgba(245,158,11,0.2)"}`,opacity:a.estLue?0.6:1}}><div><div style={{fontWeight:700,color:a.severite==="CRITIQUE"?"#FF4D6D":a.severite==="INFO"?"#00D4AA":"#F59E0B",fontSize:13}}>{a.severite==="CRITIQUE"?"🔴":a.severite==="INFO"?"✅":"🟡"} {String(a.type||"").replace(/_/g," ")} — {equipements.find(e=>e.id===a.equipement_id)?.nom||`Équipement #${a.equipement_id}`}</div><div style={{fontSize:12,color:"var(--muted)",marginTop:4}}>{a.message}</div><div style={{fontSize:11,color:"var(--muted-3)",marginTop:2}}>{formaterDate(a.createdAt)}</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={badge(a.severite)}>{a.severite}</span>{!a.estLue&&<button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>lireAlerte(a.id)}>Lue</button>}</div></div>))}</div>)}
+    {alertes.length>0&&(<div className="bm-card" style={S.card}><div style={S.cardTitle}>🔔 Alertes automatiques</div>{alertes.slice(0,10).map(a=>(<div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",marginBottom:8,borderRadius:8,background:a.estLue?"var(--w02)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.06)":a.severite==="INFO"?"rgba(0,212,170,0.06)":"rgba(245,158,11,0.06)",border:`1px solid ${a.estLue?"var(--w05)":a.severite==="CRITIQUE"?"rgba(255,77,109,0.2)":a.severite==="INFO"?"rgba(0,212,170,0.2)":"rgba(245,158,11,0.2)"}`,opacity:a.estLue?0.6:1}}><div><div style={{fontWeight:700,color:a.severite==="CRITIQUE"?"#FF4D6D":a.severite==="INFO"?"#00D4AA":"#F59E0B",fontSize:13}}>{a.severite==="CRITIQUE"?"🔴":a.severite==="INFO"?"✅":"🟡"} {String(a.type||"").replace(/_/g," ")} — {equipements.find(e=>e.id===a.equipement_id)?.nom||`Équipement #${a.equipement_id}`}</div><div style={{fontSize:12,color:"var(--muted)",marginTop:4}}>{a.message}</div><div style={{fontSize:11,color:"var(--muted-3)",marginTop:2}}>{formaterDate(a.createdAt)}</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={badge(a.severite)}>{a.severite}</span>{!a.estLue&&<button style={{...S.btn("#64748B"),fontSize:11,padding:"4px 10px"}} onClick={()=>lireAlerte(a.id)}>Lue</button>}</div></div>))}</div>)}
     {equipements.filter(e=>e.scoreRisque>=75).map(e=>(<div key={e.id} style={{background:"rgba(255,77,109,0.06)",border:"1px solid rgba(255,77,109,0.2)",borderRadius:10,padding:16,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontWeight:700,color:"#FF4D6D"}}>🔴 RISQUE CRITIQUE — {e.nom}</div><div style={{fontSize:13,color:"rgba(255,77,109,0.7)",marginTop:4}}>Service : {e.service} | Score : {e.scoreRisque}%</div></div><button style={S.btnSolid("#FF4D6D")} onClick={()=>setOnglet("maintenances")}>Planifier</button></div>))}
     {alertes.length===0&&equipements.filter(e=>e.scoreRisque>=50).length===0&&(<div style={{...S.card,padding:32,textAlign:"center"}}><div style={{fontSize:18,color:"#00D4AA",fontWeight:700}}>✅ Aucune alerte active</div></div>)}
   </div>
@@ -1608,7 +1622,7 @@ const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,rea
   return(
     <div>
       {codes&&(
-        <div style={S.card}>
+        <div className="bm-card" style={S.card}>
           <div style={S.cardTitle}>🔑 Codes d'invitation de {organisation?.nom||"votre organisation"}</div>
           <div style={{fontSize:13,color:"var(--muted-2)",marginBottom:16,lineHeight:1.6}}>Le code utilisé à l'inscription (« Rejoindre une organisation ») détermine le rôle de la personne. Pour nommer un administrateur, changez le rôle dans le tableau ci-dessous.</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16}}>
@@ -1631,15 +1645,15 @@ const Utilisateurs = memo(({utilisateurs,currentUserId,desactiverUtilisateur,rea
           {!jeSuisProprio&&<span> — seul le propriétaire peut nommer ou retirer un administrateur</span>}
         </div>
       </div>
-      <div style={S.card}>
-        <table style={S.tbl}>
+      <div className="bm-card" style={S.card}>
+        <table className="bm-table" style={S.tbl}>
           <thead><tr>{["Nom","Email","Rôle","Statut","Créé le","Actions"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
           <tbody>{utilisateurs.map(u=>(<tr key={u.id} style={{opacity:u.actif?1:0.5}}><td style={S.td}><div style={{fontWeight:600,color:"var(--text)"}}>{u.prenom} {u.nom}</div></td><td style={{...S.td,color:"var(--muted)"}}>{u.email}</td><td style={S.td}>{u.est_proprietaire?<span style={{...badge("ADMIN"),background:"rgba(245,158,11,0.15)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.35)"}}>👑 PROPRIÉTAIRE</span>
       :(u.actif===1&&(u.role!=="ADMIN"||jeSuisProprio))?<select value={u.role} onChange={e=>changerRole(u,e.target.value)} title="Changer le rôle" style={{...badge(u.role),cursor:"pointer",outline:"none",appearance:"auto"}}><option value="TECHNICIEN">TECHNICIEN</option><option value="INGENIEUR">INGENIEUR</option>{(jeSuisProprio||u.role==="ADMIN")&&<option value="ADMIN" disabled={u.role!=="ADMIN"&&nbAdmins>=MAX_ADMINS}>ADMIN{u.role==="ADMIN"?" (adjoint)":nbAdmins>=MAX_ADMINS?" — limite atteinte":""}</option>}</select>
       :<span style={badge(u.role)}>{u.role}{u.role==="ADMIN"?" (adjoint)":""}</span>}</td><td style={S.td}><span style={badge(u.actif?"En service":"En panne")}>{u.actif?"✅ Actif":"❌ Inactif"}</span></td><td style={{...S.td,color:"var(--muted-3)"}}>{u.createdAt?.split("T")[0]||u.createdAt}</td><td style={S.td}><div style={{display:"flex",gap:6}}>{jeSuisProprio&&u.role==="ADMIN"&&u.actif===1&&!u.est_proprietaire&&<button onClick={()=>transfererPropriete(u)} style={{background:"rgba(245,158,11,0.1)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.25)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>👑 Transférer la propriété</button>}{u.id!==currentUserId&&u.actif===1&&!u.est_proprietaire&&(u.role!=="ADMIN"||jeSuisProprio)&&<button onClick={()=>desactiverUtilisateur(u.id)} style={{background:"rgba(255,77,109,0.1)",color:"#FF4D6D",border:"1px solid rgba(255,77,109,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>🚫 Désactiver</button>}{u.actif===0&&(u.role!=="ADMIN"||jeSuisProprio)&&<button onClick={()=>reactiverUtilisateur(u.id)} style={{background:"rgba(0,212,170,0.1)",color:"#00D4AA",border:"1px solid rgba(0,212,170,0.2)",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:11}}>✅ Réactiver</button>}{u.id===currentUserId&&<span style={{fontSize:11,color:"var(--muted-3)",fontStyle:"italic"}}>Votre compte</span>}</div></td></tr>))}</tbody>
         </table>
       </div>
-      {showForm&&(<div style={S.overlay}><div style={S.modal}><h3 style={{marginBottom:20,color:"var(--text)",fontSize:18}}>👤 Nouvel utilisateur</h3><div style={S.fgrid}><div><label style={S.lbl}>Nom *</label><input style={S.inp} placeholder="Nom de famille" value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div><div><label style={S.lbl}>Prénom</label><input style={S.inp} placeholder="Prénom" value={form.prenom} onChange={e=>setForm(p=>({...p,prenom:e.target.value}))}/></div><div><label style={S.lbl}>Email *</label><input style={S.inp} type="email" placeholder="email@hopital.dz" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))}/></div><div><label style={S.lbl}>Mot de passe *</label><input style={S.inp} type="password" placeholder="Minimum 6 caractères" value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))}/></div><div><label style={S.lbl}>Rôle</label><select style={S.sel} value={form.role} onChange={e=>setForm(p=>({...p,role:e.target.value}))}><option value="TECHNICIEN">Technicien</option><option value="INGENIEUR">Ingénieur Biomédical</option>{jeSuisProprio&&<option value="ADMIN" disabled={nbAdmins>=MAX_ADMINS}>Administrateur adjoint{nbAdmins>=MAX_ADMINS?" (limite atteinte)":""}</option>}</select></div></div><div style={{display:"flex",gap:12,justifyContent:"flex-end"}}><button style={S.btnO} onClick={()=>setShowForm(false)}>Annuler</button><button style={S.btnSolid()} onClick={sauvegarder}>Créer</button></div></div></div>)}
+      {showForm&&(<div className="bm-overlay" style={S.overlay}><div className="bm-modal" style={S.modal}><h3 style={{marginBottom:20,color:"var(--text)",fontSize:18}}>👤 Nouvel utilisateur</h3><div className="bm-fgrid" style={S.fgrid}><div><label style={S.lbl}>Nom *</label><input style={S.inp} placeholder="Nom de famille" value={form.nom} onChange={e=>setForm(p=>({...p,nom:e.target.value}))}/></div><div><label style={S.lbl}>Prénom</label><input style={S.inp} placeholder="Prénom" value={form.prenom} onChange={e=>setForm(p=>({...p,prenom:e.target.value}))}/></div><div><label style={S.lbl}>Email *</label><input style={S.inp} type="email" placeholder="email@hopital.dz" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))}/></div><div><label style={S.lbl}>Mot de passe *</label><input style={S.inp} type="password" placeholder="Minimum 6 caractères" value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))}/></div><div><label style={S.lbl}>Rôle</label><select style={S.sel} value={form.role} onChange={e=>setForm(p=>({...p,role:e.target.value}))}><option value="TECHNICIEN">Technicien</option><option value="INGENIEUR">Ingénieur Biomédical</option>{jeSuisProprio&&<option value="ADMIN" disabled={nbAdmins>=MAX_ADMINS}>Administrateur adjoint{nbAdmins>=MAX_ADMINS?" (limite atteinte)":""}</option>}</select></div></div><div style={{display:"flex",gap:12,justifyContent:"flex-end"}}><button style={S.btnO} onClick={()=>setShowForm(false)}>Annuler</button><button style={S.btnSolid()} onClick={sauvegarder}>Créer</button></div></div></div>)}
     </div>
   );
 });
@@ -1681,6 +1695,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
   const [utilisateurs,setUtilisateurs]=useState([]);
   const [fiches,setFiches]=useState([]);
   const [estProprietaire,setEstProprietaire]=useState(false);
+  const [menuOuvert,setMenuOuvert]=useState(false); // menu ☰ sur téléphone
   const [ficheEnCours,setFicheEnCours]=useState(null); // maintenance en train d'être terminée
   const [chargement,setChargement]=useState(true);
   const [message,setMessage]=useState(null);
@@ -1854,10 +1869,21 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
   return(
     <div style={{...S.app,position:"relative"}}>
       <AnimatedBackground/>
-      {message&&<div style={S.toast(message.type)}>{message.t}</div>}
+      {message&&<div className="bm-toast" style={S.toast(message.type)}>{message.t}</div>}
       {showExport&&<ModalExport onAnnuler={()=>setShowExport(false)} onGenerer={genererRapport}/>}
       {ficheEnCours&&<ModalFiche maint={ficheEnCours} equipement={equipements.find(e=>e.id===ficheEnCours.equipementId)} organisation={organisation} user={user} telephoneParDefaut={fiches[0]?.telephone||""} onAnnuler={()=>setFicheEnCours(null)} onValider={terminerAvecFiche}/>}
-      <div style={S.sidebar}>
+      {/* Barre du haut et fond du menu : visibles seulement sur téléphone (voir mobile.css) */}
+      <div className="bm-topbar">
+        <button type="button" aria-label="Menu" className="bm-burger" onClick={()=>setMenuOuvert(true)}>☰</button>
+        <img src={logoEmbleme} alt="" style={{width:30,height:"auto"}}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:800,color:"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{titres[onglet]?.title}</div>
+          <div style={{fontSize:10,color:"var(--muted)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>BIKIBioMed · {organisation?.nom||""}</div>
+        </div>
+        {alertesNonLues>0&&<span onClick={()=>setOnglet("alertes")} style={{background:"#FF4D6D",color:"white",borderRadius:999,fontSize:11,padding:"2px 8px",fontWeight:700,cursor:"pointer"}}>🔔 {alertesNonLues}</span>}
+      </div>
+      {menuOuvert&&<div className="bm-voile" onClick={()=>setMenuOuvert(false)}/>}
+      <div className={`bm-sidebar${menuOuvert?" ouvert":""}`} style={S.sidebar}>
         <div style={S.sidebarTop}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
             <img src={logoEmbleme} alt="" style={{width:40,height:"auto",flexShrink:0}}/>
@@ -1870,7 +1896,7 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
         </div>
         <nav style={{flex:1,paddingTop:8,overflowY:"auto"}}>
           {nav.map(item=>(
-            <div key={item.id} style={S.nav(onglet===item.id)} onClick={()=>setOnglet(item.id)}>
+            <div key={item.id} style={S.nav(onglet===item.id)} onClick={()=>{setOnglet(item.id);setMenuOuvert(false);window.scrollTo(0,0);}}>
               <span>{item.icon}</span>
               <span style={{flex:1,fontSize:13}}>{item.label}</span>
               {item.badge&&<span style={{background:"#FF4D6D",color:"white",borderRadius:"999px",fontSize:10,padding:"1px 6px",fontWeight:700}}>{alertesNonLues}</span>}
@@ -1883,8 +1909,8 @@ function Plateforme({user,token,organisation,prefInitiales,onLogout,onMajUtilisa
           <div style={{fontSize:9,color:"var(--muted-4)",textAlign:"center",marginTop:8,letterSpacing:"0.05em"}}>v9.0.0 ✅ IA INTÉGRÉE</div>
         </div>
       </div>
-      <div style={S.main}>
-        <div style={S.title}>{titres[onglet]?.title}</div>
+      <div className="bm-main" style={S.main}>
+        <div className="bm-title" style={S.title}>{titres[onglet]?.title}</div>
         <div style={S.sub}>{titres[onglet]?.sub}</div>
         {onglet==="dashboard"&&<Dashboard equipements={equipements} maintenances={maintenances} pieStatuts={pieStatuts} barServices={barServices} pieMaint={pieMaint} total={total} serv={serv} maint={maint} panne={panne} dispo={dispo} crit={crit} exportPDF={exportPDF} setOnglet={setOnglet} estProprietaire={estProprietaire} telechargerSauvegarde={telechargerSauvegarde}/>}
         {onglet==="equipements"&&<Equipements equipements={equipements} peutModifier={peutModifier} supprimerEquipement={supprimerEquipement} changerEquipMonitoring={changerEquipMonitoring} setOnglet={setOnglet} token={token} charger={charger}/>}

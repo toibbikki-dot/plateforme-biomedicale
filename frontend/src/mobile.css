@@ -1,0 +1,94 @@
+/* ════════════════════════════════════════════════════════════
+   VERSION TÉLÉPHONE (écrans de moins de 768 px)
+   Sur ordinateur, rien ne change : la barre du haut et le voile
+   sont masqués, et toutes les règles ci-dessous sont ignorées.
+   Les !important sont nécessaires car les styles de la plateforme
+   sont écrits directement dans les composants (styles « en ligne »).
+   ════════════════════════════════════════════════════════════ */
+
+.bm-topbar, .bm-voile { display: none; }
+
+@media (max-width: 767px) {
+  /* ── Barre du haut avec le bouton ☰ ── */
+  .bm-topbar {
+    display: flex; align-items: center; gap: 10px;
+    position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 150;
+    padding: 0 12px;
+    background: var(--sidebar-bg);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(0, 212, 170, 0.15);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  }
+  .bm-burger {
+    width: 40px; height: 40px; flex-shrink: 0;
+    border-radius: 10px; border: 1px solid var(--w08);
+    background: var(--w03); color: var(--text);
+    font-size: 20px; line-height: 1; cursor: pointer;
+  }
+
+  /* ── Menu latéral : caché à gauche, glisse à l'ouverture ── */
+  .bm-sidebar {
+    width: 82vw !important; max-width: 300px !important;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    z-index: 300 !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
+  }
+  .bm-sidebar.ouvert { transform: translateX(0); }
+  .bm-voile {
+    display: block; position: fixed; inset: 0; z-index: 250;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  /* ── Contenu sur toute la largeur ── */
+  .bm-main {
+    margin-left: 0 !important;
+    padding: 72px 12px 24px !important;
+  }
+  .bm-title { display: none !important; } /* le titre est déjà dans la barre du haut */
+
+  /* Cartes un peu moins aérées */
+  .bm-card { padding: 14px !important; margin-bottom: 16px !important; }
+
+  /* ── Indicateurs : 2 cartes par ligne ── */
+  .bm-kgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+  .bm-kgrid > div { padding: 14px 10px !important; }
+
+  /* ── Blocs côte à côte → l'un sous l'autre ── */
+  .bm-grid2 { grid-template-columns: minmax(0, 1fr) !important; gap: 14px !important; }
+
+  /* ── Tableaux : défilement horizontal à l'intérieur de leur cadre ── */
+  div:has(> table.bm-table), div:has(> div > table.bm-table) {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  table.bm-table { min-width: 640px; }
+
+  /* ── Champs de recherche, filtres et tris : pleine largeur ── */
+  .bm-main input:not([type="checkbox"]):not([type="radio"]),
+  .bm-main select { max-width: 100% !important; }
+
+  /* ── Fenêtres (fiche, export, modification…) ── */
+  .bm-overlay { align-items: flex-end !important; }
+  .bm-modal {
+    max-width: 100% !important; width: 100% !important;
+    max-height: 92vh !important;
+    border-radius: 16px 16px 0 0 !important;
+    padding: 18px 14px !important;
+  }
+  .bm-fgrid { grid-template-columns: minmax(0, 1fr) !important; gap: 10px !important; }
+
+  /* ── Calendrier compact : pastilles au lieu des noms ── */
+  .bm-cal-entete button { padding: 6px 10px !important; font-size: 12px !important; }
+  .bm-cal-jour { min-height: 44px !important; padding: 3px !important; }
+  .bm-cal-item {
+    font-size: 0 !important; padding: 0 !important;
+    height: 6px; border-radius: 3px !important; margin-top: 3px !important;
+  }
+
+  /* ── Message flottant (toast) adapté à l'écran ── */
+  .bm-toast { top: 66px !important; left: 12px !important; right: 12px !important; }
+}
